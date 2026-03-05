@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.8.3 — Multi-Instance Guard
+
+### Bug Fixes
+
+- **Duplicate Gateway Processes (#48)** — Services now guard against re-entry when Android re-delivers `onStartCommand` via `START_STICKY`, preventing duplicate processes, leaked wakelocks, and repeated answers to connected apps
+- **Wakelock Leaks** — All 5 foreground services release any existing wakelock before acquiring a new one
+- **Orphan PTY Instances** — Terminal, onboarding, configure, and package install screens now kill the previous PTY before starting a new one on retry
+- **Notification ID Collisions** — SetupService and ScreenCaptureService no longer share notification IDs with other services
+
+---
+
 ## v1.8.2 — DNS Reliability, Screenshot Capture, Custom Models & Setup Detection
 
 ### Bug Fixes
