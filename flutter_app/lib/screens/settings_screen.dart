@@ -361,6 +361,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'dashboardUrl': _prefs.dashboardUrl,
         'autoStart': _prefs.autoStartGateway,
         'nodeEnabled': _prefs.nodeEnabled,
+        'nodeDeviceToken': _prefs.nodeDeviceToken,
+        'nodeGatewayHost': _prefs.nodeGatewayHost,
+        'nodeGatewayPort': _prefs.nodeGatewayPort,
+        'nodeGatewayToken': _prefs.nodeGatewayToken,
       };
 
       final path = await _getSnapshotPath();
@@ -410,6 +414,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       if (snapshot['nodeEnabled'] != null) {
         _prefs.nodeEnabled = snapshot['nodeEnabled'] as bool;
+      }
+      if (snapshot['nodeDeviceToken'] != null) {
+        _prefs.nodeDeviceToken = snapshot['nodeDeviceToken'] as String;
+      }
+      if (snapshot['nodeGatewayHost'] != null) {
+        _prefs.nodeGatewayHost = snapshot['nodeGatewayHost'] as String;
+      }
+      if (snapshot['nodeGatewayPort'] != null) {
+        _prefs.nodeGatewayPort = snapshot['nodeGatewayPort'] as int;
+      }
+      if (snapshot['nodeGatewayToken'] != null) {
+        _prefs.nodeGatewayToken = snapshot['nodeGatewayToken'] as String;
       }
 
       // Refresh UI

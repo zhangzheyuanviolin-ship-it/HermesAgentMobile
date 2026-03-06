@@ -76,8 +76,10 @@ class NodeProvider extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _nodeService.setAppInForeground(true);
       _onAppResumed();
     } else if (state == AppLifecycleState.paused) {
+      _nodeService.setAppInForeground(false);
       _onAppPaused();
     }
   }
