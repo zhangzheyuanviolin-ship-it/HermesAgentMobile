@@ -183,8 +183,9 @@ class _NodeScreenState extends State<NodeScreen> {
                     _capabilityTile(
                       theme,
                       'Canvas',
-                      'Navigate and interact with web pages',
+                      'Not available on mobile',
                       Icons.web,
+                      available: false,
                     ),
                     _capabilityTile(
                       theme,
@@ -215,6 +216,12 @@ class _NodeScreenState extends State<NodeScreen> {
                       'Sensors',
                       'Read accelerometer, gyroscope, magnetometer, barometer',
                       Icons.sensors,
+                    ),
+                    _capabilityTile(
+                      theme,
+                      'Serial',
+                      'Bluetooth and USB serial communication',
+                      Icons.usb,
                     ),
                     const SizedBox(height: 16),
 
@@ -285,17 +292,24 @@ class _NodeScreenState extends State<NodeScreen> {
   }
 
   Widget _capabilityTile(
-      ThemeData theme, String title, String subtitle, IconData icon) {
+      ThemeData theme, String title, String subtitle, IconData icon,
+      {bool available = true}) {
     return Card(
       child: ListTile(
         leading: Icon(icon, color: theme.colorScheme.onSurfaceVariant),
         title: Text(title),
         subtitle: Text(subtitle),
-        trailing: const Icon(
-          Icons.check_circle,
-          color: AppColors.statusGreen,
-          size: 20,
-        ),
+        trailing: available
+            ? const Icon(
+                Icons.check_circle,
+                color: AppColors.statusGreen,
+                size: 20,
+              )
+            : const Icon(
+                Icons.block,
+                color: AppColors.statusAmber,
+                size: 20,
+              ),
       ),
     );
   }
