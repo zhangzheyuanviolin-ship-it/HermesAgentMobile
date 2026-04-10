@@ -1,18 +1,18 @@
 class AppConstants {
   static const String appName = 'Hermes Agent';
-  static const String version = '0.1.0';
+  static const String version = '0.1.2';
   static const String packageName = 'com.nxg.hermesagentmobile';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).
   static final ansiEscape = RegExp(r'\x1b\[[0-9;]*[a-zA-Z]');
 
-  static const String authorName = 'B_nair';
-  static const String authorEmail = 'van.bellinghen.brian@gmail.com';
-  static const String githubUrl = 'https://github.com/nousresearch/hermes-agent-mobile';
+  static const String authorName='B_nair';
+  static const String authorEmail='van.bellinghen.brian@gmail.com';
+  static const String githubUrl = 'https://github.com/Binair-Dev/HermesAgentMobile';
   static const String license = 'MIT';
 
   static const String githubApiLatestRelease =
-      'https://api.github.com/repos/nousresearch/hermes-agent-mobile/releases/latest';
+      'https://api.github.com/repos/Binair-Dev/HermesAgentMobile/releases/latest';
 
   static const String orgName = 'Hermes Agent Mobile';
   static const String orgEmail = 'van.bellinghen.brian@gmail.com';

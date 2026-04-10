@@ -132,11 +132,19 @@ class GatewayService : Service() {
                 // Check if an existing gateway is already listening on the port.
                 // Moved inside thread to avoid blocking the main thread (#60).
                 if (isPortInUse()) {
-                    emitLog("[INFO] Gateway already running on port 18789, adopting existing instance")
-                    updateNotificationRunning()
-                    startUptimeTicker()
-                    startWatchdog()
-                    return@Thread
+                    // Wait briefly for TIME_WAIT socket to clear after a manual stop
+                    var waited = 0
+                    while (waited < 3000 && isPortInUse()) {
+                        Thread.sleep(300)
+                        waited += 300
+                    }
+                    if (isPortInUse()) {
+                        emitLog("[INFO] Gateway already running on port 18789, adopting existing instance")
+                        updateNotificationRunning()
+                        startUptimeTicker()
+                        startWatchdog()
+                        return@Thread
+                    }
                 }
 
                 emitLog("[INFO] Setting up environment...")
@@ -187,11 +195,19 @@ class GatewayService : Service() {
                 // Final check right before launch — another instance may have
                 // started between the first check and now
                 if (isPortInUse()) {
-                    emitLog("Gateway already running on port 18789, skipping launch")
-                    updateNotificationRunning()
-                    startUptimeTicker()
-                    startWatchdog()
-                    return@Thread
+                    // Wait briefly for TIME_WAIT socket to clear after a manual stop
+                    var waited = 0
+                    while (waited < 3000 && isPortInUse()) {
+                        Thread.sleep(300)
+                        waited += 300
+                    }
+                    if (isPortInUse()) {
+                        emitLog("Gateway already running on port 18789, skipping launch")
+                        updateNotificationRunning()
+                        startUptimeTicker()
+                        startWatchdog()
+                        return@Thread
+                    }
                 }
 
                 emitLog("[INFO] Spawning proot process...")
