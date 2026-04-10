@@ -289,8 +289,37 @@ class GatewayService : Service() {
         }.also { it.start() }
     }
 
+    /** Read direct child PIDs from /proc (kernel children file). */
+    private fun getChildrenPids(pid: Int): List<Int> {
+        return try {
+            File("/proc/$pid/task/$pid/children")
+                .readText()
+                .trim()
+                .split(Regex("\\s+"))
+                .filter { it.isNotEmpty() }
+                .map { it.toInt() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Recursively collect all descendant PIDs of a given process. */
+    private fun getAllDescendantPids(pid: Int): List<Int> {
+        val result = mutableListOf<Int>()
+        val queue = ArrayDeque<Int>()
+        queue.add(pid)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            val children = getChildrenPids(current)
+            result.addAll(children)
+            queue.addAll(children)
+        }
+        return result
+    }
+
     private fun stopGateway() {
         val procToStop: Process?
+        val procPid: Int?
         synchronized(lock) {
             stopping = true
             restartCount = maxRestarts // Prevent auto-restart
@@ -304,24 +333,27 @@ class GatewayService : Service() {
             gatewayThread = null
             procToStop = gatewayProcess
             gatewayProcess = null
+            // Try to obtain the OS PID of the proot process before we lose the reference
+            procPid = try {
+                val pidLong = Process::class.java.getDeclaredMethod("pid").invoke(procToStop) as? Long
+                pidLong?.toInt()
+            } catch (_: Exception) {
+                null
+            }
         }
         emitLog("Gateway stopped by user")
-        val filesDir = applicationContext.filesDir.absolutePath
         Thread({
-            // 1) Kill the inner Python gateway process directly via its PID file.
-            // proot's --kill-on-exit doesn't always propagate signals to child processes.
-            try {
-                val pidFile = File("$filesDir/rootfs/ubuntu/root/.hermes/gateway.pid")
-                if (pidFile.exists()) {
-                    val pid = pidFile.readText().trim()
-                    if (pid.isNotEmpty()) {
-                        try { Runtime.getRuntime().exec("kill -9 $pid") } catch (_: Exception) {}
-                    }
+            // 1) Kill all descendant processes (deepest first) so they don't become
+            // orphaned and survive after proot is killed.
+            procPid?.let { pid ->
+                val descendants = getAllDescendantPids(pid).sortedDescending()
+                descendants.forEach { childPid ->
+                    try {
+                        Runtime.getRuntime().exec("kill -9 $childPid")
+                    } catch (_: Exception) {}
                 }
-            } catch (_: Exception) {}
-            // 2) Fallback: kill any python process running the gateway script.
-            try { Runtime.getRuntime().exec("pkill -9 -f \"gateway/run.py\"") } catch (_: Exception) {}
-            // 3) Gracefully terminate proot via SIGTERM, then force-kill if needed.
+            }
+            // 2) Gracefully terminate proot via SIGTERM, then force-kill if needed.
             procToStop?.let { proc ->
                 try {
                     proc.destroy()
