@@ -210,21 +210,26 @@ class GatewayService : Service() {
                     }
                 }
 
-                emitLog("[INFO] Patching gateway/run.py for --replace support...")
+                emitLog("[INFO] Writing gateway wrapper script...")
                 try {
                     pm.runInProotSync(
-                        "sed -i '/parser.add_argument(\"--verbose\"/a\\    parser.add_argument(\"--replace\", action=\"store_true\", help=\"Replace existing gateway instance\")' /root/hermes-agent/gateway/run.py && " +
-                        "sed -i 's/asyncio.run(start_gateway(config))/asyncio.run(start_gateway(config, replace=args.replace))/' /root/hermes-agent/gateway/run.py"
+                        "cat > /root/gateway_replace.py << 'PYEOF'\n" +
+                        "import asyncio, sys\n" +
+                        "sys.path.insert(0, '/root/hermes-agent')\n" +
+                        "from gateway.run import start_gateway\n" +
+                        "success = asyncio.run(start_gateway(replace=True))\n" +
+                        "sys.exit(0 if success else 1)\n" +
+                        "PYEOF"
                     )
                 } catch (_: Exception) {
-                    emitLog("[WARN] Failed to patch gateway/run.py, attempting launch anyway")
+                    emitLog("[WARN] Failed to write gateway wrapper, attempting launch anyway")
                 }
 
                 emitLog("[INFO] Spawning proot process...")
                 synchronized(lock) {
                     if (stopping) return@Thread
                     processStartTime = System.currentTimeMillis()
-                    gatewayProcess = pm.startProotProcess("exec /root/hermes-agent/venv/bin/python /root/hermes-agent/gateway/run.py --replace")
+                    gatewayProcess = pm.startProotProcess("exec /root/hermes-agent/venv/bin/python /root/gateway_replace.py")
                 }
                 updateNotificationRunning()
                 emitLog("[INFO] Gateway process spawned")
