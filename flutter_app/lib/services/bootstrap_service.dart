@@ -167,7 +167,9 @@ class BootstrapService {
         'cd /root && '
         'if [ ! -d hermes-agent ]; then '
         'git clone https://github.com/nousresearch/hermes-agent.git hermes-agent; '
-        'fi',
+        'fi && '
+        "sed -i '/parser.add_argument(\"--verbose\"/a\\    parser.add_argument(\"--replace\", action=\"store_true\", help=\"Replace existing gateway instance\")' /root/hermes-agent/gateway/run.py && "
+        "sed -i 's/asyncio.run(start_gateway(config))/asyncio.run(start_gateway(config, replace=args.replace))/' /root/hermes-agent/gateway/run.py",
         timeout: 600,
       );
 
