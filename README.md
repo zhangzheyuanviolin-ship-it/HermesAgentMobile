@@ -9,6 +9,9 @@
 
 > Run **Hermes Agent AI Gateway** on Android — standalone Flutter app with built-in terminal, gateway controls, and one-tap setup. Also available as a Termux CLI package.
 
+> **Credits & Origin**  
+> The mobile shell, proot integration, terminal emulator, and gateway service architecture are based on [**Hermes Agent Mobile**](https://github.com/nousresearch/hermes-agent-mobile) by Nous Research. This repository is a fork adapted specifically to run the [**Hermes Agent**](https://github.com/nousresearch/hermes-agent) AI gateway.
+
 ---
 
 ## What is Hermes Agent Mobile?
@@ -62,7 +65,7 @@ Hermes Agent Mobile brings the [Hermes Agent](https://github.com/nousresearch/he
 
 ### Flutter App (Recommended)
 
-1. Download the latest APK from [Releases](https://github.com/nousresearch/hermes-agent-mobile/releases)
+1. Download the latest APK from [Releases](https://github.com/Binair-Dev/HermesAgentMobile/releases)
 2. Install the APK on your Android device
 3. Open the app and tap **Begin Setup**
 4. Configure your API keys in **Onboarding**
@@ -71,8 +74,8 @@ Hermes Agent Mobile brings the [Hermes Agent](https://github.com/nousresearch/he
 Or build from source:
 
 ```bash
-git clone https://github.com/nousresearch/hermes-agent-mobile.git
-cd hermes-agent-mobile/flutter_app
+git clone https://github.com/Binair-Dev/HermesAgentMobile.git
+cd HermesAgentMobile/flutter_app
 flutter build apk --release
 ```
 
@@ -81,7 +84,7 @@ flutter build apk --release
 #### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nousresearch/hermes-agent-mobile/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Binair-Dev/HermesAgentMobile/main/install.sh | bash
 ```
 
 #### Or via npm
