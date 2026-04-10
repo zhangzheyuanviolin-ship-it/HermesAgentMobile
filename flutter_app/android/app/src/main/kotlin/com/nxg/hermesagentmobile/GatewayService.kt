@@ -306,23 +306,33 @@ class GatewayService : Service() {
             gatewayProcess = null
         }
         emitLog("Gateway stopped by user")
-        // Gracefully terminate proot via SIGTERM first, allowing its --kill-on-exit
-        // handler to kill child processes (node.js / hermes gateway daemon) before proot
-        // exits.  destroyForcibly() (SIGKILL) bypasses proot's exit handler, which
-        // can leave the gateway daemon alive even after proot is killed.
-        procToStop?.let { proc ->
-            Thread({
+        val filesDir = applicationContext.filesDir.absolutePath
+        Thread({
+            // 1) Kill the inner Python gateway process directly via its PID file.
+            // proot's --kill-on-exit doesn't always propagate signals to child processes.
+            try {
+                val pidFile = File("$filesDir/rootfs/ubuntu/root/.hermes/gateway.pid")
+                if (pidFile.exists()) {
+                    val pid = pidFile.readText().trim()
+                    if (pid.isNotEmpty()) {
+                        try { Runtime.getRuntime().exec("kill -9 $pid") } catch (_: Exception) {}
+                    }
+                }
+            } catch (_: Exception) {}
+            // 2) Fallback: kill any python process running the gateway script.
+            try { Runtime.getRuntime().exec("pkill -9 -f \"gateway/run.py\"") } catch (_: Exception) {}
+            // 3) Gracefully terminate proot via SIGTERM, then force-kill if needed.
+            procToStop?.let { proc ->
                 try {
-                    proc.destroy() // SIGTERM — lets proot clean up its children
+                    proc.destroy()
                     if (!proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
-                        // proot did not exit cleanly; force-kill it.
                         proc.destroyForcibly()
                     }
                 } catch (_: Exception) {
                     try { proc.destroyForcibly() } catch (_: Exception) {}
                 }
-            }, "gateway-stop").apply { isDaemon = true }.start()
-        }
+            }
+        }, "gateway-stop").apply { isDaemon = true }.start()
     }
 
     /** Watchdog: periodically checks if the proot process is alive.
