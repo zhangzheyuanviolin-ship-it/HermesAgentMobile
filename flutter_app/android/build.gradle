@@ -19,7 +19,10 @@ subprojects {
         project.ext.set("flutter", [
             compileSdkVersion: 35,
             minSdkVersion: 29,
-            targetSdkVersion: 36
+            targetSdkVersion: 36,
+            // Some plugins (e.g. jni) read flutter.ndkVersion; provide it
+            // explicitly so CI builds don't fail with null ndkVersion.
+            ndkVersion: "27.2.12479018"
         ])
     }
 }
