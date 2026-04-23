@@ -49,12 +49,10 @@ jobs:
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
-            cat > key.properties <<EOF
-            storePassword=$ANDROID_KEYSTORE_PASSWORD
-            keyPassword=$ANDROID_KEY_PASSWORD
-            keyAlias=$ANDROID_KEY_ALIAS
-            storeFile=release.keystore
-            EOF
+            printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=release.keystore\n" \
+              "$ANDROID_KEYSTORE_PASSWORD" \
+              "$ANDROID_KEY_PASSWORD" \
+              "$ANDROID_KEY_ALIAS" > key.properties
           else
             echo "No release keystore secret found, using debug fallback signing."
           fi
