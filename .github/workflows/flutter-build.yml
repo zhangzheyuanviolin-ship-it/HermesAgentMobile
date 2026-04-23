@@ -40,7 +40,6 @@ jobs:
         run: flutter pub get
 
       - name: Prepare release signing
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         working-directory: flutter_app/android
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -48,13 +47,17 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
-          cat > key.properties <<EOF
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyPassword=$ANDROID_KEY_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
-          storeFile=release.keystore
-          EOF
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
+            cat > key.properties <<EOF
+            storePassword=$ANDROID_KEYSTORE_PASSWORD
+            keyPassword=$ANDROID_KEY_PASSWORD
+            keyAlias=$ANDROID_KEY_ALIAS
+            storeFile=release.keystore
+            EOF
+          else
+            echo "No release keystore secret found, using debug fallback signing."
+          fi
 
       - name: Print signing mode
         working-directory: flutter_app/android
