@@ -7,6 +7,22 @@ import 'native_bridge.dart';
 class BootstrapService {
   final Dio _dio = Dio();
 
+  static const String _installHermesDepsCommand =
+      'cd /root/hermes-agent && '
+      'python3 -m venv venv && '
+      'source venv/bin/activate && '
+      'pip install --upgrade pip && '
+      'if [ -f requirements.txt ]; then '
+      'pip install -r requirements.txt; '
+      'elif [ -f pyproject.toml ]; then '
+      'pip install -e .; '
+      'elif [ -f hermes_cli/setup.py ]; then '
+      'pip install -e ./hermes_cli; '
+      'else '
+      'echo "No supported dependency manifest found in /root/hermes-agent" >&2; '
+      'exit 1; '
+      'fi';
+
   void _updateSetupNotification(String text, {int progress = -1}) {
     try {
       NativeBridge.updateSetupNotification(text, progress: progress);
@@ -177,11 +193,7 @@ class BootstrapService {
         message: 'Installing Python dependencies...',
       ));
       await NativeBridge.runInProot(
-        'cd /root/hermes-agent && '
-        'python3 -m venv venv && '
-        'source venv/bin/activate && '
-        'pip install --upgrade pip && '
-        'pip install -r requirements.txt',
+        _installHermesDepsCommand,
         timeout: 1800,
       );
 

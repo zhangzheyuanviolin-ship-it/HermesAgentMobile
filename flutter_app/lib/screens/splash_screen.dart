@@ -20,6 +20,21 @@ class _SplashScreenState extends State<SplashScreen>
   String _status = 'Loading...';
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
+  static const String _repairHermesDepsCommand =
+      'cd /root/hermes-agent && '
+      'python3 -m venv venv && '
+      'source venv/bin/activate && '
+      'pip install --upgrade pip && '
+      'if [ -f requirements.txt ]; then '
+      'pip install -r requirements.txt; '
+      'elif [ -f pyproject.toml ]; then '
+      'pip install -e .; '
+      'elif [ -f hermes_cli/setup.py ]; then '
+      'pip install -e ./hermes_cli; '
+      'else '
+      'echo "No supported dependency manifest found in /root/hermes-agent" >&2; '
+      'exit 1; '
+      'fi';
 
   @override
   void initState() {
@@ -122,7 +137,7 @@ class _SplashScreenState extends State<SplashScreen>
             if (!hermesOk) {
               setState(() => _status = 'Reinstalling Hermes Agent...');
               await NativeBridge.runInProot(
-                'cd /root/hermes-agent && source venv/bin/activate && pip install -r requirements.txt',
+                _repairHermesDepsCommand,
                 timeout: 1800,
               );
             }

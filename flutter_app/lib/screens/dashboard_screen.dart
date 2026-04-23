@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../constants.dart';
 import '../providers/gateway_provider.dart';
 import '../widgets/gateway_controls.dart';
 import '../widgets/status_card.dart';
 import 'configure_screen.dart';
+import 'chat_screen.dart';
+import 'model_settings_screen.dart';
 import 'onboarding_screen.dart';
 import 'terminal_screen.dart';
 import 'logs_screen.dart';
@@ -50,6 +50,24 @@ class DashboardScreen extends StatelessWidget {
             ),
             _buildActionCard(
               theme,
+              '聊天',
+              '与 Hermes Agent 直接对话',
+              icon: Icons.chat_bubble_outline,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ChatScreen()),
+              ),
+            ),
+            _buildActionCard(
+              theme,
+              '模型与 API 设置',
+              '手动配置模型、端点和密钥',
+              icon: Icons.tune,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ModelSettingsScreen()),
+              ),
+            ),
+            _buildActionCard(
+              theme,
               'Onboarding',
               'Configure API keys and binding',
               icon: Icons.rocket_launch,
@@ -60,8 +78,8 @@ class DashboardScreen extends StatelessWidget {
             _buildActionCard(
               theme,
               'Configure',
-              'Edit gateway settings',
-              icon: Icons.tune,
+              'Run hermes setup in terminal',
+              icon: Icons.build,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ConfigureScreen()),
               ),
