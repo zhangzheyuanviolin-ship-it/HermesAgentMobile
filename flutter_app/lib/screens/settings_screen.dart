@@ -220,7 +220,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _exportSnapshot() async {
     try {
-      final hermesConfig = await NativeBridge.readRootfsFile('root/.hermes/config.yaml');
+      final hermesConfig =
+          await NativeBridge.readRootfsFile('root/.hermes/config.yaml') ?? '';
       final snapshot = {
         'version': AppConstants.version,
         'timestamp': DateTime.now().toIso8601String(),

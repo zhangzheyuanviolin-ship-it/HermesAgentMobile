@@ -35,7 +35,11 @@ class NativeBridge {
   }
 
   static Future<String> runInProot(String command, {int timeout = 900}) async {
-    return await _channel.invokeMethod('runInProot', {'command': command, 'timeout': timeout});
+    final output = await _channel.invokeMethod<String>(
+      'runInProot',
+      {'command': command, 'timeout': timeout},
+    );
+    return output ?? '';
   }
 
   static Future<bool> startGateway() async {
@@ -58,8 +62,8 @@ class NativeBridge {
     return await _channel.invokeMethod('writeResolv');
   }
 
-  static Future<String> readRootfsFile(String path) async {
-    return await _channel.invokeMethod('readRootfsFile', {'path': path});
+  static Future<String?> readRootfsFile(String path) async {
+    return await _channel.invokeMethod<String>('readRootfsFile', {'path': path});
   }
 
   static Future<bool> writeRootfsFile(String path, String content) async {

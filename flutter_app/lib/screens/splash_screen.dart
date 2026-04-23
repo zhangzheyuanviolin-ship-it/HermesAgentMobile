@@ -95,7 +95,8 @@ class _SplashScreenState extends State<SplashScreen>
               await downloadDir.create(recursive: true);
             }
             final snapshotPath = '$sdcard/Download/hermes-snapshot-$oldVersion.json';
-            final hermesConfig = await NativeBridge.readRootfsFile('root/.hermes/config.yaml');
+            final hermesConfig =
+                await NativeBridge.readRootfsFile('root/.hermes/config.yaml') ?? '';
             final snapshot = {
               'version': oldVersion,
               'timestamp': DateTime.now().toIso8601String(),
