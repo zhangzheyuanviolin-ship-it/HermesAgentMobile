@@ -15,6 +15,13 @@ class ChatStreamUpdate {
   });
 }
 
+class ChatCancelledException implements Exception {
+  const ChatCancelledException();
+
+  @override
+  String toString() => '任务已取消';
+}
+
 class _SplitOutput {
   final String process;
   final String finalText;
@@ -26,12 +33,21 @@ class ChatService {
   ChatService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
+  bool _cancelRequested = false;
+  http.Client? _activeStreamingClient;
+
+  void cancelActiveRequest() {
+    _cancelRequested = true;
+    _activeStreamingClient?.close();
+    _activeStreamingClient = null;
+  }
 
   Stream<ChatStreamUpdate> streamChat({
     required List<ChatHistoryMessage> history,
     required String userPrompt,
     required String model,
   }) async* {
+    _cancelRequested = false;
     final messages = [
       {
         'role': 'system',
@@ -62,123 +78,156 @@ class ChatService {
         'messages': messages,
       });
 
-    final response = await _client.send(request);
-    if (response.statusCode >= 400) {
-      final body = await response.stream.bytesToString();
-      throw Exception('HTTP ${response.statusCode}: ${_extractErrorMessage(body)}');
-    }
-
-    await for (final line in response.stream
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())) {
-      if (!line.startsWith('data:')) continue;
-      final payload = line.substring(5).trim();
-      if (payload.isEmpty) continue;
-      if (payload == '[DONE]') break;
-
-      Map<String, dynamic> data;
-      try {
-        data = jsonDecode(payload) as Map<String, dynamic>;
-      } catch (_) {
-        continue;
+    final requestClient = http.Client();
+    _activeStreamingClient = requestClient;
+    try {
+      final response = await requestClient.send(request);
+      if (_cancelRequested) {
+        throw const ChatCancelledException();
+      }
+      if (response.statusCode >= 400) {
+        final body = await response.stream.bytesToString();
+        throw Exception('HTTP ${response.statusCode}: ${_extractErrorMessage(body)}');
       }
 
-      if (data['error'] != null) {
-        throw Exception(_extractErrorMessage(jsonEncode(data)));
-      }
+      await for (final line in response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())) {
+        if (_cancelRequested) {
+          throw const ChatCancelledException();
+        }
+        if (!line.startsWith('data:')) continue;
+        final payload = line.substring(5).trim();
+        if (payload.isEmpty) continue;
+        if (payload == '[DONE]') break;
 
-      final choices = data['choices'];
-      if (choices is! List || choices.isEmpty) continue;
-      final choice = choices.first;
-      if (choice is! Map) continue;
-
-      final delta = choice['delta'];
-      if (delta is Map) {
-        final piece = _extractAnyText(delta['content']);
-        if (piece.isNotEmpty) {
-          rawAssistant.write(piece);
+        Map<String, dynamic> data;
+        try {
+          data = jsonDecode(payload) as Map<String, dynamic>;
+        } catch (_) {
+          continue;
         }
 
-        final reasoning = _joinNonEmpty([
-          _extractAnyText(delta['reasoning']),
-          _extractAnyText(delta['reasoning_content']),
-          _extractAnyText(delta['thinking']),
+        if (data['error'] != null) {
+          throw Exception(_extractErrorMessage(jsonEncode(data)));
+        }
+
+        final choices = data['choices'];
+        if (choices is! List || choices.isEmpty) continue;
+        final choice = choices.first;
+        if (choice is! Map) continue;
+
+        final delta = choice['delta'];
+        if (delta is Map) {
+          final piece = _extractAnyText(delta['content']);
+          if (piece.isNotEmpty) {
+            rawAssistant.write(piece);
+          }
+
+          final reasoning = _joinNonEmpty([
+            _extractAnyText(delta['reasoning']),
+            _extractAnyText(delta['reasoning_content']),
+            _extractAnyText(delta['thinking']),
+          ]);
+          if (reasoning.isNotEmpty) {
+            processFromChunks.write(reasoning);
+            processFromChunks.write('\n');
+          }
+
+          final toolCalls = _formatToolCalls(delta['tool_calls']);
+          if (toolCalls.isNotEmpty) {
+            processFromChunks.write(toolCalls);
+            processFromChunks.write('\n');
+          }
+        }
+
+        final message = choice['message'];
+        if (message is Map) {
+          final msgPiece = _extractAnyText(message['content']);
+          if (msgPiece.isNotEmpty) {
+            rawAssistant.write(msgPiece);
+          }
+          final msgToolCalls = _formatToolCalls(message['tool_calls']);
+          if (msgToolCalls.isNotEmpty) {
+            processFromChunks.write(msgToolCalls);
+            processFromChunks.write('\n');
+          }
+        }
+
+        final split = _splitTaggedOutput(rawAssistant.toString());
+        final processText = _joinNonEmpty([
+          processFromChunks.toString().trim(),
+          split.process,
         ]);
-        if (reasoning.isNotEmpty) {
-          processFromChunks.write(reasoning);
-          processFromChunks.write('\n');
-        }
+        final finalText = split.finalText.isNotEmpty
+            ? split.finalText
+            : rawAssistant.toString().trim();
 
-        final toolCalls = _formatToolCalls(delta['tool_calls']);
-        if (toolCalls.isNotEmpty) {
-          processFromChunks.write(toolCalls);
-          processFromChunks.write('\n');
-        }
+        yield ChatStreamUpdate(
+          assistantProcess: processText,
+          assistantFinal: finalText,
+        );
       }
 
-      final message = choice['message'];
-      if (message is Map) {
-        final msgPiece = _extractAnyText(message['content']);
-        if (msgPiece.isNotEmpty) {
-          rawAssistant.write(msgPiece);
-        }
-        final msgToolCalls = _formatToolCalls(message['tool_calls']);
-        if (msgToolCalls.isNotEmpty) {
-          processFromChunks.write(msgToolCalls);
-          processFromChunks.write('\n');
-        }
+      if (_cancelRequested) {
+        throw const ChatCancelledException();
       }
 
-      final split = _splitTaggedOutput(rawAssistant.toString());
-      final processText = _joinNonEmpty([
+      var split = _splitTaggedOutput(rawAssistant.toString());
+      var processText = _joinNonEmpty([
         processFromChunks.toString().trim(),
         split.process,
       ]);
-      final finalText = split.finalText.isNotEmpty
+      var finalText = split.finalText.isNotEmpty
           ? split.finalText
           : rawAssistant.toString().trim();
+
+      // Fallback: some models stream only process/tool chunks and leave final empty.
+      if (finalText.isEmpty) {
+        final nonStreamText = await _fetchNonStream(
+          messages,
+          model,
+          client: requestClient,
+        );
+        split = _splitTaggedOutput(nonStreamText);
+        if (split.process.isNotEmpty) {
+          processText = _joinNonEmpty([processText, split.process]);
+        }
+        if (split.finalText.isNotEmpty) {
+          finalText = split.finalText;
+        } else {
+          finalText = nonStreamText.trim();
+        }
+      }
+
+      if (_cancelRequested) {
+        throw const ChatCancelledException();
+      }
 
       yield ChatStreamUpdate(
         assistantProcess: processText,
         assistantFinal: finalText,
+        done: true,
       );
-    }
-
-    var split = _splitTaggedOutput(rawAssistant.toString());
-    var processText = _joinNonEmpty([
-      processFromChunks.toString().trim(),
-      split.process,
-    ]);
-    var finalText = split.finalText.isNotEmpty
-        ? split.finalText
-        : rawAssistant.toString().trim();
-
-    // Fallback: some models stream only process/tool chunks and leave final empty.
-    if (finalText.isEmpty) {
-      final nonStreamText = await _fetchNonStream(messages, model);
-      split = _splitTaggedOutput(nonStreamText);
-      if (split.process.isNotEmpty) {
-        processText = _joinNonEmpty([processText, split.process]);
+    } catch (_) {
+      if (_cancelRequested) {
+        throw const ChatCancelledException();
       }
-      if (split.finalText.isNotEmpty) {
-        finalText = split.finalText;
-      } else {
-        finalText = nonStreamText.trim();
+      rethrow;
+    } finally {
+      requestClient.close();
+      if (identical(_activeStreamingClient, requestClient)) {
+        _activeStreamingClient = null;
       }
     }
-
-    yield ChatStreamUpdate(
-      assistantProcess: processText,
-      assistantFinal: finalText,
-      done: true,
-    );
   }
 
   Future<String> _fetchNonStream(
     List<Map<String, String>> messages,
     String model,
+    {http.Client? client}
   ) async {
-    final response = await _client.post(
+    final response = await (client ?? _client).post(
       Uri.parse('${AppConstants.apiServerUrl}/v1/chat/completions'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
@@ -411,6 +460,7 @@ class ChatService {
   }
 
   void dispose() {
+    _activeStreamingClient?.close();
     _client.close();
   }
 }

@@ -11,6 +11,14 @@ import '../services/chat_session_store.dart';
 import '../services/native_bridge.dart';
 import 'chat_sessions_screen.dart';
 
+enum _RuntimeStatus {
+  ready,
+  running,
+  completed,
+  cancelled,
+  error,
+}
+
 class _PendingAttachment {
   final String id;
   final String name;
@@ -50,6 +58,9 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _loadingSessions = true;
   bool _sending = false;
   bool _showProcess = true;
+  _RuntimeStatus _runtimeStatus = _RuntimeStatus.ready;
+  String _runtimeTitle = '已就绪';
+  String _runtimeDetail = '可以发送消息';
 
   @override
   void initState() {
@@ -211,6 +222,9 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _sending = true;
       _turns.add(newTurn);
+      _runtimeStatus = _RuntimeStatus.running;
+      _runtimeTitle = '任务执行中';
+      _runtimeDetail = '请求已发送，正在等待模型输出...';
     });
     await _persistCurrentSession();
     _scrollToBottom();
@@ -229,27 +243,73 @@ class _ChatScreenState extends State<ChatScreen> {
             assistantProcess: update.assistantProcess,
             assistantFinal: update.assistantFinal,
             isStreaming: !update.done,
+            clearError: true,
           );
+          if (update.done) {
+            _runtimeStatus = _RuntimeStatus.completed;
+            _runtimeTitle = '任务已完成';
+            _runtimeDetail = '已收到最终回复，可继续发送消息';
+          } else {
+            _runtimeStatus = _RuntimeStatus.running;
+            _runtimeTitle = '任务执行中';
+            _runtimeDetail = _progressDetailFromProcess(update.assistantProcess);
+          }
         });
         _scrollToBottom();
       }
+    } on ChatCancelledException {
+      final idx = _turns.indexWhere((t) => t.id == newTurn.id);
+      if (idx >= 0) {
+        final existing = _turns[idx];
+        setState(() {
+          _turns[idx] = existing.copyWith(
+            assistantProcess: _appendCancellationNote(existing.assistantProcess),
+            isStreaming: false,
+            clearError: true,
+          );
+          _runtimeStatus = _RuntimeStatus.cancelled;
+          _runtimeTitle = '任务已取消';
+          _runtimeDetail = '当前执行已停止，可立即发送新消息';
+        });
+      }
     } catch (e) {
       final idx = _turns.indexWhere((t) => t.id == newTurn.id);
+      final status = _statusForError(e);
       if (idx >= 0) {
         setState(() {
           _turns[idx] = _turns[idx].copyWith(
             isStreaming: false,
             error: e.toString(),
           );
+          _runtimeStatus = _RuntimeStatus.error;
+          _runtimeTitle = status.$1;
+          _runtimeDetail = status.$2;
         });
       }
     } finally {
       if (mounted) {
-        setState(() => _sending = false);
+        setState(() {
+          _sending = false;
+          if (_runtimeStatus == _RuntimeStatus.running) {
+            _runtimeStatus = _RuntimeStatus.ready;
+            _runtimeTitle = '已就绪';
+            _runtimeDetail = '可以继续发送消息';
+          }
+        });
       }
       await _persistCurrentSession();
       _scrollToBottom();
     }
+  }
+
+  void _cancelCurrentTask() {
+    if (!_sending) return;
+    _chatService.cancelActiveRequest();
+    setState(() {
+      _runtimeStatus = _RuntimeStatus.running;
+      _runtimeTitle = '正在取消任务...';
+      _runtimeDetail = '已发送取消请求，请稍候';
+    });
   }
 
   String _composePrompt(String text, List<_PendingAttachment> attachments) {
@@ -280,6 +340,92 @@ class _ChatScreenState extends State<ChatScreen> {
         curve: Curves.easeOut,
       );
     });
+  }
+
+  String _progressDetailFromProcess(String process) {
+    final lines = process
+        .split('\n')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return '模型正在执行任务...';
+    final last = lines.last;
+    return last.length > 80 ? '${last.substring(0, 80)}...' : last;
+  }
+
+  String _appendCancellationNote(String process) {
+    final note = '用户已手动取消当前任务。';
+    final trimmed = process.trim();
+    if (trimmed.isEmpty) return note;
+    if (trimmed.contains(note)) return trimmed;
+    return '$trimmed\n\n$note';
+  }
+
+  (String, String) _statusForError(Object error) {
+    final text = error.toString();
+    final lower = text.toLowerCase();
+    final disconnected = lower.contains('failed host lookup') ||
+        lower.contains('connection reset') ||
+        lower.contains('connection closed') ||
+        lower.contains('connection aborted') ||
+        lower.contains('timed out') ||
+        lower.contains('network') ||
+        lower.contains('socket') ||
+        lower.contains('http 502') ||
+        lower.contains('http 503') ||
+        lower.contains('http 504');
+    if (disconnected) {
+      return ('API连接已断开', '请检查网络或网关状态后重试');
+    }
+    return ('任务执行失败', text.length > 80 ? '${text.substring(0, 80)}...' : text);
+  }
+
+  Widget _buildRuntimeBanner(ThemeData theme) {
+    final (IconData icon, Color color) = switch (_runtimeStatus) {
+      _RuntimeStatus.ready => (Icons.check_circle_outline, Colors.green.shade700),
+      _RuntimeStatus.running => (Icons.autorenew, Colors.blue.shade700),
+      _RuntimeStatus.completed => (Icons.task_alt, Colors.green.shade800),
+      _RuntimeStatus.cancelled => (Icons.cancel_outlined, Colors.orange.shade800),
+      _RuntimeStatus.error => (Icons.error_outline, theme.colorScheme.error),
+    };
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '状态：$_runtimeTitle',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _runtimeDetail,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _escapeForBashSingleQuote(String input) {
@@ -594,6 +740,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                _buildRuntimeBanner(theme),
                 Expanded(
                   child: _turns.isEmpty
                       ? const Center(
@@ -655,15 +802,17 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            FilledButton(
-                              onPressed: _sending ? null : _send,
-                              child: _sending
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.send),
+                            Semantics(
+                              label: _sending ? '取消当前任务' : '发送消息',
+                              hint: _sending ? '双击可终止当前任务执行' : '双击可发送输入内容',
+                              button: true,
+                              child: FilledButton.icon(
+                                onPressed: _sending ? _cancelCurrentTask : _send,
+                                icon: Icon(
+                                  _sending ? Icons.stop_circle_outlined : Icons.send,
+                                ),
+                                label: Text(_sending ? '取消' : '发送'),
+                              ),
                             ),
                           ],
                         ),
