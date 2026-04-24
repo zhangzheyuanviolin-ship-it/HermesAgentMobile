@@ -48,7 +48,8 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
+            mkdir -p app
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
             printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=release.keystore\n" \
               "$ANDROID_KEYSTORE_PASSWORD" \
               "$ANDROID_KEY_PASSWORD" \
@@ -60,7 +61,7 @@ jobs:
       - name: Print signing mode
         working-directory: flutter_app/android
         run: |
-          if [ -f key.properties ]; then
+          if [ -f key.properties ] && [ -f app/release.keystore ]; then
             echo "Signing mode: release keystore"
           else
             echo "Signing mode: debug fallback"
