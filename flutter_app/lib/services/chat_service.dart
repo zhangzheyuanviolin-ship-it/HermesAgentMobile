@@ -90,22 +90,63 @@ class ChatService {
         throw Exception('HTTP ${response.statusCode}: ${_extractErrorMessage(body)}');
       }
 
-      await for (final line in response.stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())) {
-        if (_cancelRequested) {
-          throw const ChatCancelledException();
+      var currentSseEvent = '';
+      final currentSseData = StringBuffer();
+
+      void resetSseFrame() {
+        currentSseEvent = '';
+        currentSseData.clear();
+      }
+
+      (bool, ChatStreamUpdate?) handleSseFrame() {
+        final payload = currentSseData.toString().trim();
+        final eventType = currentSseEvent.trim();
+        resetSseFrame();
+
+        if (payload.isEmpty) return (false, null);
+        if (payload == '[DONE]') return (true, null);
+
+        if (eventType == 'hermes.tool.progress') {
+          try {
+            final obj = jsonDecode(payload);
+            if (obj is Map<String, dynamic>) {
+              final label = _extractAnyText(obj['label']);
+              final tool = _extractAnyText(obj['tool']);
+              final emoji = _extractAnyText(obj['emoji']);
+              final line = _joinNonEmpty([
+                if (label.isNotEmpty) '${emoji.isNotEmpty ? '$emoji ' : ''}$label',
+                if (label.isEmpty && tool.isNotEmpty) '工具调用: $tool',
+              ]);
+              if (line.isNotEmpty) {
+                processFromChunks.write(line);
+                processFromChunks.write('\n');
+              }
+            }
+          } catch (_) {
+            // Ignore malformed custom tool events.
+          }
+          final split = _splitTaggedOutput(rawAssistant.toString());
+          final processText = _joinNonEmpty([
+            processFromChunks.toString().trim(),
+            split.process,
+          ]);
+          final finalText = split.finalText.isNotEmpty
+              ? split.finalText
+              : rawAssistant.toString().trim();
+          return (
+            false,
+            ChatStreamUpdate(
+              assistantProcess: processText,
+              assistantFinal: finalText,
+            ),
+          );
         }
-        if (!line.startsWith('data:')) continue;
-        final payload = line.substring(5).trim();
-        if (payload.isEmpty) continue;
-        if (payload == '[DONE]') break;
 
         Map<String, dynamic> data;
         try {
           data = jsonDecode(payload) as Map<String, dynamic>;
         } catch (_) {
-          continue;
+          return (false, null);
         }
 
         if (data['error'] != null) {
@@ -113,9 +154,9 @@ class ChatService {
         }
 
         final choices = data['choices'];
-        if (choices is! List || choices.isEmpty) continue;
+        if (choices is! List || choices.isEmpty) return (false, null);
         final choice = choices.first;
-        if (choice is! Map) continue;
+        if (choice is! Map) return (false, null);
 
         final delta = choice['delta'];
         if (delta is Map) {
@@ -163,10 +204,42 @@ class ChatService {
             ? split.finalText
             : rawAssistant.toString().trim();
 
-        yield ChatStreamUpdate(
-          assistantProcess: processText,
-          assistantFinal: finalText,
+        return (
+          false,
+          ChatStreamUpdate(
+            assistantProcess: processText,
+            assistantFinal: finalText,
+          ),
         );
+      }
+
+      await for (final line in response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())) {
+        if (_cancelRequested) {
+          throw const ChatCancelledException();
+        }
+        if (line.isEmpty) {
+          final (done, update) = handleSseFrame();
+          if (update != null) {
+            yield update;
+          }
+          if (done) break;
+          continue;
+        }
+        if (line.startsWith('event:')) {
+          currentSseEvent = line.substring(6).trim();
+          continue;
+        }
+        if (line.startsWith('data:')) {
+          currentSseData.writeln(line.substring(5).trim());
+        }
+      }
+      if (currentSseData.isNotEmpty) {
+        final (_, update) = handleSseFrame();
+        if (update != null) {
+          yield update;
+        }
       }
 
       if (_cancelRequested) {
@@ -311,34 +384,15 @@ class ChatService {
   }
 
   _SplitOutput _splitTaggedOutput(String raw) {
-    final processRegex = RegExp(r'<assistant_process>([\s\S]*?)</assistant_process>');
-    final finalRegex = RegExp(r'<assistant_final>([\s\S]*?)</assistant_final>');
-
-    final process = processRegex
-        .allMatches(raw)
-        .map((m) => (m.group(1) ?? '').trim())
-        .where((s) => s.isNotEmpty)
-        .join('\n\n')
-        .trim();
-
-    final finalText = finalRegex
-        .allMatches(raw)
-        .map((m) => (m.group(1) ?? '').trim())
-        .where((s) => s.isNotEmpty)
-        .join('\n\n')
-        .trim();
-
-    if (finalText.isNotEmpty) {
-      return _SplitOutput(process: process, finalText: finalText);
+    final normalized = _decodeTagEntities(raw);
+    final structured = _splitStructuredTaggedOutput(normalized);
+    if (structured.finalText.isNotEmpty || structured.process.isNotEmpty) {
+      return structured;
     }
 
-    var cleaned = raw.replaceAll(processRegex, '').trim();
-    cleaned = cleaned.replaceAll(finalRegex, '').trim();
+    final cleaned = _removeTagWrappers(normalized).trim();
     final heuristic = _splitHeuristicOutput(cleaned);
-    return _SplitOutput(
-      process: _joinNonEmpty([process, heuristic.process]),
-      finalText: heuristic.finalText,
-    );
+    return _SplitOutput(process: heuristic.process, finalText: heuristic.finalText);
   }
 
   _SplitOutput _splitHeuristicOutput(String raw) {
@@ -354,7 +408,7 @@ class ChatService {
         .toList();
 
     if (blocks.length < 2) {
-      return _SplitOutput(process: '', finalText: normalized);
+      return _splitLineHeuristicOutput(normalized);
     }
 
     var pivot = -1;
@@ -384,15 +438,152 @@ class ChatService {
     }
 
     if (pivot <= 0 || pivot >= blocks.length) {
-      return _SplitOutput(process: '', finalText: normalized);
+      return _splitLineHeuristicOutput(normalized);
     }
 
     final process = blocks.take(pivot).join('\n\n').trim();
     final finalText = blocks.skip(pivot).join('\n\n').trim();
     if (finalText.isEmpty) {
-      return _SplitOutput(process: '', finalText: normalized);
+      return _splitLineHeuristicOutput(normalized);
     }
     return _SplitOutput(process: process, finalText: finalText);
+  }
+
+  _SplitOutput _splitLineHeuristicOutput(String raw) {
+    final lines = raw.replaceAll('\r\n', '\n').split('\n');
+    if (lines.isEmpty) {
+      return const _SplitOutput(process: '', finalText: '');
+    }
+
+    final processLines = <String>[];
+    final finalLines = <String>[];
+    var inFinal = false;
+    for (final original in lines) {
+      final line = original.trimRight();
+      final lineTrim = line.trim();
+      if (lineTrim.isEmpty) {
+        if (inFinal) {
+          finalLines.add(line);
+        } else if (processLines.isNotEmpty) {
+          processLines.add(line);
+        }
+        continue;
+      }
+
+      if (!inFinal && _looksLikeFinalBlock(lineTrim)) {
+        inFinal = true;
+      }
+
+      if (!inFinal && _looksLikeProcessBlock(lineTrim)) {
+        processLines.add(line);
+        continue;
+      }
+
+      if (inFinal) {
+        finalLines.add(line);
+      } else {
+        // Once a non-process content appears, treat all following lines as final.
+        inFinal = true;
+        finalLines.add(line);
+      }
+    }
+
+    final process = processLines.join('\n').trim();
+    final finalText = finalLines.join('\n').trim();
+    if (finalText.isEmpty) {
+      return _SplitOutput(process: '', finalText: raw.trim());
+    }
+    return _SplitOutput(process: process, finalText: finalText);
+  }
+
+  _SplitOutput _splitStructuredTaggedOutput(String raw) {
+    final processOpen = RegExp(r'<assistant_process\b[^>]*>', caseSensitive: false);
+    final processClose = RegExp(r'</assistant_process\s*>', caseSensitive: false);
+    final finalOpen = RegExp(r'<assistant_final\b[^>]*>', caseSensitive: false);
+    final finalClose = RegExp(r'</assistant_final\s*>', caseSensitive: false);
+    final thinkOpen = RegExp(r'<(?:think|thinking|reasoning|thought)\b[^>]*>', caseSensitive: false);
+    final thinkClose = RegExp(r'</(?:think|thinking|reasoning|thought)\s*>', caseSensitive: false);
+
+    final pOpen = processOpen.firstMatch(raw);
+    final pClose = processClose.firstMatch(raw);
+    final fOpen = finalOpen.firstMatch(raw);
+    final fClose = finalClose.firstMatch(raw);
+
+    String process = '';
+    String finalText = '';
+
+    if (pOpen != null) {
+      final start = pOpen.end;
+      var end = raw.length;
+      if (pClose != null && pClose.start >= start) {
+        end = pClose.start;
+      } else if (fOpen != null && fOpen.start >= start) {
+        end = fOpen.start;
+      }
+      if (end >= start) {
+        process = raw.substring(start, end).trim();
+      }
+    }
+
+    if (fOpen != null) {
+      final start = fOpen.end;
+      var end = raw.length;
+      if (fClose != null && fClose.start >= start) {
+        end = fClose.start;
+      }
+      if (end >= start) {
+        finalText = raw.substring(start, end).trim();
+      }
+    }
+
+    final thinkMatches = RegExp(
+      r'<(?:think|thinking|reasoning|thought)\b[^>]*>([\s\S]*?)(?:</(?:think|thinking|reasoning|thought)\s*>|$)',
+      caseSensitive: false,
+    ).allMatches(raw);
+    final thinkProcess = thinkMatches
+        .map((m) => (m.group(1) ?? '').trim())
+        .where((s) => s.isNotEmpty)
+        .join('\n\n')
+        .trim();
+    if (thinkProcess.isNotEmpty) {
+      process = _joinNonEmpty([process, thinkProcess]);
+    }
+
+    if (finalText.isEmpty && (pOpen != null || fOpen != null || thinkOpen.hasMatch(raw))) {
+      var cleaned = raw;
+      cleaned = cleaned.replaceAll(processOpen, '');
+      cleaned = cleaned.replaceAll(processClose, '');
+      cleaned = cleaned.replaceAll(finalOpen, '');
+      cleaned = cleaned.replaceAll(finalClose, '');
+      cleaned = cleaned.replaceAll(thinkOpen, '');
+      cleaned = cleaned.replaceAll(thinkClose, '');
+      finalText = cleaned.trim();
+    }
+
+    return _SplitOutput(
+      process: process.trim(),
+      finalText: finalText.trim(),
+    );
+  }
+
+  String _removeTagWrappers(String raw) {
+    var cleaned = raw;
+    final tags = <RegExp>[
+      RegExp(r'</?assistant_process\b[^>]*>', caseSensitive: false),
+      RegExp(r'</?assistant_final\b[^>]*>', caseSensitive: false),
+      RegExp(r'</?(?:think|thinking|reasoning|thought)\b[^>]*>', caseSensitive: false),
+    ];
+    for (final tag in tags) {
+      cleaned = cleaned.replaceAll(tag, '');
+    }
+    return cleaned;
+  }
+
+  String _decodeTagEntities(String raw) {
+    return raw
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&amp;', '&');
   }
 
   bool _looksLikeProcessBlock(String block) {
