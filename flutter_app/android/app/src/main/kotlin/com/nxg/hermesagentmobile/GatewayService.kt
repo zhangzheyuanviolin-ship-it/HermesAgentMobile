@@ -42,9 +42,9 @@ class GatewayService : Service() {
             // This covers slow devices where dir setup takes a long time.
             val thread = inst.gatewayThread
             if (thread != null && thread.isAlive) return true
-            // Fallback: within startup window (120s)
+            // Fallback: within startup window (3600s)
             val elapsed = System.currentTimeMillis() - inst.startTime
-            return elapsed < 120_000
+            return elapsed < 3_600_000
         }
 
         fun start(context: Context) {
@@ -82,7 +82,7 @@ class GatewayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification("Starting..."))
+        startForeground(NOTIFICATION_ID, buildNotification("正在启动..."))
         if (isRunning) {
             updateNotificationRunning()
             return START_STICKY
@@ -202,7 +202,7 @@ class GatewayService : Service() {
                         waited += 300
                     }
                     if (isPortInUse()) {
-                        emitLog("Gateway already running on port 18789, skipping launch")
+                        emitLog("检测到 18789 端口已有网关在运行，跳过重复启动")
                         updateNotificationRunning()
                         startUptimeTicker()
                         startWatchdog()
@@ -275,7 +275,7 @@ class GatewayService : Service() {
                     // Cap delay at 16s to avoid excessively long waits
                     val delayMs = minOf(2000L * (1 shl (restartCount - 1)), 16000L)
                     emitLog("[INFO] Auto-restarting in ${delayMs / 1000}s (attempt $restartCount/$maxRestarts)...")
-                    updateNotification("Restarting in ${delayMs / 1000}s (attempt $restartCount)...")
+                    updateNotification("${delayMs / 1000} 秒后重启（第 $restartCount 次）...")
                     Thread.sleep(delayMs)
                     if (!stopping) {
                         startTime = System.currentTimeMillis()
@@ -283,14 +283,14 @@ class GatewayService : Service() {
                     }
                 } else if (restartCount >= maxRestarts) {
                     emitLog("[WARN] Max restarts reached. Gateway stopped.")
-                    updateNotification("Gateway stopped (crashed)")
+                    updateNotification("网关已停止（进程异常退出）")
                     isRunning = false
                 }
             } catch (e: Exception) {
                 if (!stopping) {
                     emitLog("[ERROR] Gateway error: ${e.message}")
                     isRunning = false
-                    updateNotification("Gateway error")
+                    updateNotification("网关发生错误")
                 }
             }
         }.also { it.start() }
@@ -310,7 +310,7 @@ class GatewayService : Service() {
             procToStop = gatewayProcess
             gatewayProcess = null
         }
-        emitLog("Gateway stopped by user")
+        emitLog("用户已停止网关")
         val filesDir = applicationContext.filesDir.absolutePath
         Thread({
             var pythonKilled = false
@@ -420,7 +420,7 @@ class GatewayService : Service() {
     }
 
     private fun updateNotificationRunning() {
-        updateNotification("Running on port 18789 \u2022 ${formatUptime()}")
+        updateNotification("运行于端口 18789 \u2022 ${formatUptime()}")
     }
 
     /** Emit a log message to the Flutter EventChannel.
@@ -458,10 +458,10 @@ class GatewayService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Hermes Agent Gateway",
+                "Hermes Agent 网关",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps the Hermes Agent gateway running in the background"
+                description = "保持 Hermes Agent 网关在后台持续运行"
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -482,7 +482,7 @@ class GatewayService : Service() {
             Notification.Builder(this)
         }
 
-        builder.setContentTitle("Hermes Agent Gateway")
+        builder.setContentTitle("Hermes Agent 网关")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)

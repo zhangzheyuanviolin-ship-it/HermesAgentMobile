@@ -23,6 +23,9 @@ dependencies:
   cryptography: ^2.7.0
   google_fonts: ^6.1.0
   uuid: ^4.2.0
+  image_picker: ^1.1.2
+  file_picker: ^8.1.2
+  path: ^1.9.0
   camera: ^0.11.0
   geolocator: ^12.0.0
   flutter_blue_plus: ^1.32.0

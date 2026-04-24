@@ -42,18 +42,18 @@ class BootstrapService {
         return const SetupState(
           step: SetupStep.complete,
           progress: 1.0,
-          message: 'Setup complete',
+          message: '初始化完成',
         );
       }
       return const SetupState(
         step: SetupStep.checkingStatus,
         progress: 0.0,
-        message: 'Setup required',
+        message: '需要初始化',
       );
     } catch (e) {
       return SetupState(
         step: SetupStep.error,
-        error: 'Failed to check status: $e',
+        error: '检查状态失败: $e',
       );
     }
   }
@@ -69,9 +69,9 @@ class BootstrapService {
       onProgress(const SetupState(
         step: SetupStep.checkingStatus,
         progress: 0.0,
-        message: 'Setting up directories...',
+        message: '正在初始化目录...',
       ));
-      _updateSetupNotification('Setting up directories...', progress: 2);
+      _updateSetupNotification('正在初始化目录...', progress: 2);
       try { await NativeBridge.setupDirs(); } catch (_) {}
       try { await NativeBridge.writeResolv(); } catch (_) {}
 
@@ -95,11 +95,11 @@ class BootstrapService {
       } catch (_) {}
       final tarPath = '$filesDir/tmp/ubuntu-rootfs.tar.gz';
 
-      _updateSetupNotification('Downloading Ubuntu rootfs...', progress: 5);
+      _updateSetupNotification('正在下载 Ubuntu rootfs...', progress: 5);
       onProgress(const SetupState(
         step: SetupStep.downloadingRootfs,
         progress: 0.0,
-        message: 'Downloading Ubuntu rootfs...',
+        message: '正在下载 Ubuntu rootfs...',
       ));
 
       await _dio.download(
@@ -111,34 +111,34 @@ class BootstrapService {
             final mb = (received / 1024 / 1024).toStringAsFixed(1);
             final totalMb = (total / 1024 / 1024).toStringAsFixed(1);
             final notifProgress = 5 + (progress * 25).round();
-            _updateSetupNotification('Downloading rootfs: $mb / $totalMb MB', progress: notifProgress);
+            _updateSetupNotification('下载 rootfs: $mb / $totalMb MB', progress: notifProgress);
             onProgress(SetupState(
               step: SetupStep.downloadingRootfs,
               progress: progress,
-              message: 'Downloading: $mb MB / $totalMb MB',
+              message: '下载中: $mb MB / $totalMb MB',
             ));
           }
         },
       );
 
-      _updateSetupNotification('Extracting rootfs...', progress: 30);
+      _updateSetupNotification('正在解压 rootfs...', progress: 30);
       onProgress(const SetupState(
         step: SetupStep.extractingRootfs,
         progress: 0.0,
-        message: 'Extracting rootfs (this takes a while)...',
+        message: '正在解压 rootfs（需要一些时间）...',
       ));
       await NativeBridge.extractRootfs(tarPath);
       onProgress(const SetupState(
         step: SetupStep.extractingRootfs,
         progress: 1.0,
-        message: 'Rootfs extracted',
+        message: 'rootfs 解压完成',
       ));
 
-      _updateSetupNotification('Fixing rootfs permissions...', progress: 45);
+      _updateSetupNotification('正在修复 rootfs 权限...', progress: 45);
       onProgress(const SetupState(
         step: SetupStep.installingPython,
         progress: 0.0,
-        message: 'Fixing rootfs permissions...',
+        message: '正在修复 rootfs 权限...',
       ));
       await NativeBridge.runInProot(
         'chmod -R 755 /usr/bin /usr/sbin /bin /sbin '
@@ -150,19 +150,19 @@ class BootstrapService {
         'echo permissions_fixed',
       );
 
-      _updateSetupNotification('Updating package lists...', progress: 48);
+      _updateSetupNotification('正在更新软件包列表...', progress: 48);
       onProgress(const SetupState(
         step: SetupStep.installingPython,
         progress: 0.1,
-        message: 'Updating package lists...',
+        message: '正在更新软件包列表...',
       ));
       await NativeBridge.runInProot('apt-get update -y');
 
-      _updateSetupNotification('Installing base packages...', progress: 52);
+      _updateSetupNotification('正在安装基础软件包...', progress: 52);
       onProgress(const SetupState(
         step: SetupStep.installingPython,
         progress: 0.15,
-        message: 'Installing base packages...',
+        message: '正在安装基础软件包...',
       ));
       await NativeBridge.runInProot(
         'ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime && '
@@ -173,11 +173,11 @@ class BootstrapService {
         'ca-certificates git python3 python3-venv python3-pip curl wget',
       );
 
-      _updateSetupNotification('Cloning Hermes Agent...', progress: 70);
+      _updateSetupNotification('正在克隆 Hermes Agent 仓库...', progress: 70);
       onProgress(const SetupState(
         step: SetupStep.installingHermesAgent,
         progress: 0.0,
-        message: 'Cloning Hermes Agent repository...',
+        message: '正在克隆 Hermes Agent 仓库...',
       ));
       await NativeBridge.runInProot(
         'cd /root && '
@@ -186,22 +186,22 @@ class BootstrapService {
         timeout: 600,
       );
 
-      _updateSetupNotification('Installing Python dependencies...', progress: 85);
+      _updateSetupNotification('正在安装 Python 依赖...', progress: 85);
       onProgress(const SetupState(
         step: SetupStep.installingHermesAgent,
         progress: 0.5,
-        message: 'Installing Python dependencies...',
+        message: '正在安装 Python 依赖...',
       ));
       await NativeBridge.runInProot(
         _installHermesDepsCommand,
         timeout: 1800,
       );
 
-      _updateSetupNotification('Verifying installation...', progress: 96);
+      _updateSetupNotification('正在验证安装结果...', progress: 96);
       onProgress(const SetupState(
         step: SetupStep.installingHermesAgent,
         progress: 0.9,
-        message: 'Verifying Hermes Agent installation...',
+        message: '正在验证 Hermes Agent 安装结果...',
       ));
       await NativeBridge.runInProot(
         'test -f /root/hermes-agent/gateway/run.py && echo hermes_ready',
@@ -209,33 +209,33 @@ class BootstrapService {
       onProgress(const SetupState(
         step: SetupStep.installingHermesAgent,
         progress: 1.0,
-        message: 'Hermes Agent installed',
+        message: 'Hermes Agent 安装完成',
       ));
 
-      _updateSetupNotification('Setup complete!', progress: 100);
+      _updateSetupNotification('初始化完成！', progress: 100);
       onProgress(const SetupState(
         step: SetupStep.configuringEnvironment,
         progress: 1.0,
-        message: 'Environment configured',
+        message: '环境配置完成',
       ));
 
       _stopSetupService();
       onProgress(const SetupState(
         step: SetupStep.complete,
         progress: 1.0,
-        message: 'Setup complete! Ready to start the agent.',
+        message: '初始化完成！可以启动智能体了。',
       ));
     } on DioException catch (e) {
       _stopSetupService();
       onProgress(SetupState(
         step: SetupStep.error,
-        error: 'Download failed: ${e.message}. Check your internet connection.',
+        error: '下载失败: ${e.message}。请检查网络连接。',
       ));
     } catch (e) {
       _stopSetupService();
       onProgress(SetupState(
         step: SetupStep.error,
-        error: 'Setup failed: $e',
+        error: '初始化失败: $e',
       ));
     }
   }

@@ -40,7 +40,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Setup Hermes Agent',
+                    '初始化 Hermes Agent',
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -48,8 +48,8 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _started
-                        ? 'Setting up the environment. This may take several minutes.'
-                        : 'This will download Ubuntu, Python, and Hermes Agent into a self-contained environment.',
+                        ? '正在初始化环境，可能需要几分钟。'
+                        : '将下载 Ubuntu、Python 和 Hermes Agent，并部署到应用内独立环境。',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -75,7 +75,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                             Expanded(
                               child: SingleChildScrollView(
                                 child: Text(
-                                  state.error ?? 'Unknown error',
+                                  state.error ?? '未知错误',
                                   style: TextStyle(color: theme.colorScheme.onErrorContainer),
                                 ),
                               ),
@@ -92,7 +92,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                       child: FilledButton.icon(
                         onPressed: () => _goToDashboard(context),
                         icon: const Icon(Icons.arrow_forward),
-                        label: const Text('Go to Dashboard'),
+                        label: const Text('进入控制台'),
                       ),
                     )
                   else if (!_started || state.hasError)
@@ -106,14 +106,14 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                                 provider.runSetup();
                               },
                         icon: const Icon(Icons.download),
-                        label: Text(_started ? 'Retry Setup' : 'Begin Setup'),
+                        label: Text(_started ? '重试初始化' : '开始初始化'),
                       ),
                     ),
                   if (!_started) ...[
                     const SizedBox(height: 8),
                     Center(
                       child: Text(
-                        'Requires ~500MB of storage and an internet connection',
+                        '需要约 500MB 存储空间和可用网络连接',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -123,7 +123,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                   const SizedBox(height: 16),
                   Center(
                     child: Text(
-                      'by ${AppConstants.authorName} | ${AppConstants.orgName}',
+                      '作者 ${AppConstants.authorName} | ${AppConstants.orgName}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -140,11 +140,11 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
 
   Widget _buildSteps(SetupState state, ThemeData theme) {
     final steps = [
-      (1, 'Download Ubuntu rootfs', SetupStep.downloadingRootfs),
-      (2, 'Extract rootfs', SetupStep.extractingRootfs),
-      (3, 'Install Python', SetupStep.installingPython),
-      (4, 'Install Hermes Agent', SetupStep.installingHermesAgent),
-      (5, 'Configure environment', SetupStep.configuringEnvironment),
+      (1, '下载 Ubuntu rootfs', SetupStep.downloadingRootfs),
+      (2, '解压 rootfs', SetupStep.extractingRootfs),
+      (3, '安装 Python', SetupStep.installingPython),
+      (4, '安装 Hermes Agent', SetupStep.installingHermesAgent),
+      (5, '配置环境', SetupStep.configuringEnvironment),
     ];
 
     return ListView(
@@ -161,7 +161,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
         if (state.isComplete) ...[
           const ProgressStep(
             stepNumber: 6,
-            label: 'Setup complete!',
+            label: '初始化完成！',
             isComplete: true,
           ),
         ],

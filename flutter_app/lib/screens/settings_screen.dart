@@ -60,15 +60,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: const Text('设置')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
-                _sectionHeader(theme, 'GENERAL'),
+                _sectionHeader(theme, '常规'),
                 SwitchListTile(
-                  title: const Text('Auto-start gateway'),
-                  subtitle: const Text('Start the gateway when the app opens'),
+                  title: const Text('自动启动网关'),
+                  subtitle: const Text('应用启动后自动拉起网关'),
                   value: _autoStart,
                   onChanged: (value) {
                     setState(() => _autoStart = value);
@@ -76,10 +76,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 ListTile(
-                  title: const Text('Battery Optimization'),
+                  title: const Text('电池优化'),
                   subtitle: Text(_batteryOptimized
-                      ? 'Optimized (may kill background sessions)'
-                      : 'Unrestricted (recommended)'),
+                      ? '已优化（可能杀死后台会话）'
+                      : '无限制（推荐）'),
                   leading: const Icon(Icons.battery_alert),
                   trailing: _batteryOptimized
                       ? const Icon(Icons.warning, color: AppColors.statusAmber)
@@ -91,10 +91,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 ListTile(
-                  title: const Text('Setup Storage'),
+                  title: const Text('存储权限'),
                   subtitle: Text(_storageGranted
-                      ? 'Granted — proot can access /sdcard. Revoke if not needed.'
-                      : 'Not granted (recommended) — tap to grant only if needed'),
+                      ? '已授权，proot 可访问 /sdcard。不需要时可撤销。'
+                      : '未授权（推荐），仅在需要共享存储时再授权'),
                   leading: const Icon(Icons.sd_storage),
                   trailing: _storageGranted
                       ? const Icon(Icons.warning_amber, color: AppColors.statusAmber)
@@ -106,57 +106,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 const Divider(),
-                _sectionHeader(theme, 'SYSTEM INFO'),
+                _sectionHeader(theme, '系统信息'),
                 ListTile(
-                  title: const Text('Architecture'),
+                  title: const Text('系统架构'),
                   subtitle: Text(_arch),
                   leading: const Icon(Icons.memory),
                 ),
                 ListTile(
-                  title: const Text('PRoot path'),
+                  title: const Text('PRoot 路径'),
                   subtitle: Text(_prootPath),
                   leading: const Icon(Icons.folder),
                 ),
                 ListTile(
                   title: const Text('Rootfs'),
                   subtitle: Text(_status['rootfsExists'] == true
-                      ? 'Installed'
-                      : 'Not installed'),
+                      ? '已安装'
+                      : '未安装'),
                   leading: const Icon(Icons.storage),
                 ),
                 ListTile(
                   title: const Text('Python'),
                   subtitle: Text(_status['pythonInstalled'] == true
-                      ? 'Installed'
-                      : 'Not installed'),
+                      ? '已安装'
+                      : '未安装'),
                   leading: const Icon(Icons.code),
                 ),
                 ListTile(
                   title: const Text('Hermes Agent'),
                   subtitle: Text(_status['hermesInstalled'] == true
-                      ? 'Installed'
-                      : 'Not installed'),
+                      ? '已安装'
+                      : '未安装'),
                   leading: const Icon(Icons.cloud),
                 ),
                 const Divider(),
-                _sectionHeader(theme, 'MAINTENANCE'),
+                _sectionHeader(theme, '维护'),
                 ListTile(
-                  title: const Text('Export Snapshot'),
-                  subtitle: const Text('Backup config to Downloads'),
+                  title: const Text('导出快照'),
+                  subtitle: const Text('将配置备份到下载目录'),
                   leading: const Icon(Icons.upload_file),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _exportSnapshot,
                 ),
                 ListTile(
-                  title: const Text('Import Snapshot'),
-                  subtitle: const Text('Restore config from backup'),
+                  title: const Text('导入快照'),
+                  subtitle: const Text('从备份恢复配置'),
                   leading: const Icon(Icons.download),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _importSnapshot,
                 ),
                 ListTile(
-                  title: const Text('Re-run setup'),
-                  subtitle: const Text('Reinstall or repair the environment'),
+                  title: const Text('重新执行初始化'),
+                  subtitle: const Text('重装或修复运行环境'),
                   leading: const Icon(Icons.build),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).pushReplacement(
@@ -166,11 +166,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const Divider(),
-                _sectionHeader(theme, 'ABOUT'),
+                _sectionHeader(theme, '关于'),
                 const ListTile(
                   title: Text('Hermes Agent'),
                   subtitle: Text(
-                    'AI Gateway for Android\nVersion ${AppConstants.version}',
+                    'Android 智能体网关\n版本 ${AppConstants.version}',
                   ),
                   leading: Icon(Icons.info_outline),
                   isThreeLine: true,
@@ -186,7 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 ListTile(
-                  title: const Text('Contact'),
+                  title: const Text('联系方式'),
                   subtitle: const Text(AppConstants.authorEmail),
                   leading: const Icon(Icons.email),
                   trailing: const Icon(Icons.open_in_new, size: 18),
@@ -195,7 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const ListTile(
-                  title: Text('License'),
+                  title: Text('许可证'),
                   subtitle: Text(AppConstants.license),
                   leading: Icon(Icons.description),
                 ),
@@ -232,12 +232,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await File(path).writeAsString(const JsonEncoder.withIndent('  ').convert(snapshot));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Snapshot saved to $path')),
+        SnackBar(content: Text('快照已保存到: $path')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
+        SnackBar(content: Text('导出失败: $e')),
       );
     }
   }
@@ -249,7 +249,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!await file.exists()) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No snapshot found at $path')),
+          SnackBar(content: Text('未找到快照文件: $path')),
         );
         return;
       }
@@ -265,12 +265,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadSettings();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Snapshot restored successfully. Restart the gateway to apply.')),
+        const SnackBar(content: Text('快照恢复成功，请重启网关后生效。')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Import failed: $e')),
+        SnackBar(content: Text('导入失败: $e')),
       );
     }
   }

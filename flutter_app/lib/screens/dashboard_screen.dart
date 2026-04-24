@@ -20,7 +20,7 @@ class DashboardScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Hermes Agent'),
+        title: const Text('Hermes Agent 控制台'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -40,7 +40,7 @@ class DashboardScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 8),
               child: Text(
-                'QUICK ACTIONS',
+                '快捷操作',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -68,8 +68,8 @@ class DashboardScreen extends StatelessWidget {
             ),
             _buildActionCard(
               theme,
-              'Onboarding',
-              'Configure API keys and binding',
+              '初始化引导',
+              '配置 API 密钥和绑定地址',
               icon: Icons.rocket_launch,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const OnboardingScreen()),
@@ -77,8 +77,8 @@ class DashboardScreen extends StatelessWidget {
             ),
             _buildActionCard(
               theme,
-              'Configure',
-              'Run hermes setup in terminal',
+              '环境配置',
+              '在终端运行 hermes setup',
               icon: Icons.build,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ConfigureScreen()),
@@ -86,8 +86,8 @@ class DashboardScreen extends StatelessWidget {
             ),
             _buildActionCard(
               theme,
-              'Terminal',
-              'Open a proot shell',
+              '终端',
+              '打开 proot 终端',
               icon: Icons.terminal,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const TerminalScreen()),
@@ -95,8 +95,8 @@ class DashboardScreen extends StatelessWidget {
             ),
             _buildActionCard(
               theme,
-              'Logs',
-              'View gateway logs',
+              '日志',
+              '查看网关日志',
               icon: Icons.article,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const LogsScreen()),
@@ -106,7 +106,7 @@ class DashboardScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 8),
               child: Text(
-                'STATUS',
+                '运行状态',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -118,7 +118,7 @@ class DashboardScreen extends StatelessWidget {
               builder: (context, provider, _) {
                 return _buildStatusCard(
                   theme,
-                  'Gateway',
+                  '网关',
                   provider.statusLabel,
                   icon: provider.isRunning ? Icons.cloud_done : Icons.cloud_off,
                   color: provider.statusColor,

@@ -45,13 +45,13 @@ class GatewayState {
   String get statusText {
     switch (status) {
       case GatewayStatus.stopped:
-        return 'Stopped';
+        return '已停止';
       case GatewayStatus.starting:
-        return 'Starting...';
+        return '启动中...';
       case GatewayStatus.running:
-        return 'Running';
+        return '运行中';
       case GatewayStatus.error:
-        return 'Error';
+        return '错误';
     }
   }
 }

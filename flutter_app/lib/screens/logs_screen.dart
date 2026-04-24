@@ -29,18 +29,18 @@ class _LogsScreenState extends State<LogsScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gateway Logs'),
+        title: const Text('网关日志'),
         actions: [
           IconButton(
             icon: Icon(
               _autoScroll ? Icons.vertical_align_bottom : Icons.vertical_align_top,
             ),
-            tooltip: _autoScroll ? 'Auto-scroll on' : 'Auto-scroll off',
+            tooltip: _autoScroll ? '自动滚动已开启' : '自动滚动已关闭',
             onPressed: () => setState(() => _autoScroll = !_autoScroll),
           ),
           IconButton(
             icon: const Icon(Icons.copy),
-            tooltip: 'Copy all',
+            tooltip: '复制全部',
             onPressed: _copyAll,
           ),
         ],
@@ -52,7 +52,7 @@ class _LogsScreenState extends State<LogsScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Filter logs...',
+                hintText: '筛选日志...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _filter.isNotEmpty
                     ? IconButton(
@@ -76,7 +76,7 @@ class _LogsScreenState extends State<LogsScreen> {
                     : logs.where((l) => l.toLowerCase().contains(_filter)).toList();
 
                 if (filtered.isEmpty) {
-                  return const Center(child: Text('No logs yet'));
+                  return const Center(child: Text('暂无日志'));
                 }
 
                 if (_autoScroll && _scrollController.hasClients) {
@@ -95,8 +95,9 @@ class _LogsScreenState extends State<LogsScreen> {
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final line = filtered[index];
-                    final isError = line.toLowerCase().contains('error');
-                    final isWarn = line.toLowerCase().contains('warn');
+                    final lower = line.toLowerCase();
+                    final isError = lower.contains('error') || line.contains('错误');
+                    final isWarn = lower.contains('warn') || line.contains('警告');
                     return SelectableText(
                       line,
                       style: TextStyle(
@@ -124,7 +125,7 @@ class _LogsScreenState extends State<LogsScreen> {
     final text = provider.logs.join('\n');
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('All logs copied')),
+      const SnackBar(content: Text('已复制全部日志')),
     );
   }
 }

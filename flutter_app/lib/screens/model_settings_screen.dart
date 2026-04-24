@@ -299,7 +299,7 @@ class _ModelSettingsScreenState extends State<ModelSettingsScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('保存成功，请重启 Gateway 使配置生效')),
+        const SnackBar(content: Text('保存成功，请重启网关使配置生效')),
       );
     } catch (e) {
       if (!mounted) return;

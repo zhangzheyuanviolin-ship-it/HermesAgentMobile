@@ -48,7 +48,7 @@ class SetupService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification("Setting up environment...", -1))
+        startForeground(NOTIFICATION_ID, buildNotification("正在初始化环境...", -1))
         if (isRunning) {
             return START_STICKY
         }
@@ -86,10 +86,10 @@ class SetupService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Hermes Agent Setup",
+                "Hermes Agent 初始化",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows progress during Hermes Agent environment setup"
+                description = "显示 Hermes Agent 环境初始化进度"
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -114,7 +114,7 @@ class SetupService : Service() {
             Notification.Builder(this)
         }
 
-        builder.setContentTitle("Hermes Agent Setup")
+        builder.setContentTitle("Hermes Agent 初始化")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(pendingIntent)

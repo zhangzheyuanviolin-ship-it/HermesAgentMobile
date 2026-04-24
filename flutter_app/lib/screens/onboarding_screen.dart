@@ -36,7 +36,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static final _ansiEscape = AppConstants.ansiEscape;
   static final _boxDrawing = RegExp(r'[│┤├┬┴┼╮╯╰╭─╌╴╶┌┐└┘◇◆]+');
   static final _completionPattern = RegExp(
-    r'onboard(ing)?\s+(is\s+)?complete|successfully\s+onboarded|setup\s+complete',
+    r'onboard(ing)?\s+(is\s+)?complete|successfully\s+onboarded|setup\s+complete|引导完成|初始化完成',
     caseSensitive: false,
   );
   String _outputBuffer = '';
@@ -96,12 +96,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       onboardingArgs.removeLast();
       onboardingArgs.addAll([
         '/bin/bash', '-lc',
-        'echo "=== Hermes Agent Onboarding ===" && '
-        'echo "Configure your API keys and binding settings." && '
-        'echo "TIP: Select Loopback (127.0.0.1) when asked for binding!" && '
+        'echo "=== Hermes Agent 初始化引导 ===" && '
+        'echo "请配置 API 密钥与绑定地址。" && '
+        'echo "提示：当询问绑定地址时请选择 Loopback(127.0.0.1)！" && '
         'echo "" && '
         'cd /root/hermes-agent && source venv/bin/activate && python -m hermes_cli.main setup; '
-        'echo "" && echo "Onboarding complete! You can close this screen."',
+        'echo "" && echo "引导完成！您现在可以关闭此页面。"',
       ]);
 
       _pty = Pty.start(
@@ -126,7 +126,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       });
 
       _pty!.exitCode.then((code) {
-        _terminal.write('\r\n[Onboarding exited with code $code]\r\n');
+        _terminal.write('\r\n[引导流程退出，代码 $code]\r\n');
         if (mounted) setState(() => _finished = true);
       });
 
@@ -155,7 +155,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } catch (e) {
       setState(() {
         _loading = false;
-        _error = 'Failed to start onboarding: $e';
+        _error = '启动引导失败: $e';
       });
     }
   }
@@ -210,10 +210,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (url != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Copied to clipboard'),
+          content: const Text('已复制到剪贴板'),
           duration: const Duration(seconds: 3),
           action: SnackBarAction(
-            label: 'Open',
+            label: '打开',
             onPressed: () {
               final uri = Uri.tryParse(url);
               if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -224,7 +224,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Copied to clipboard'),
+          content: Text('已复制到剪贴板'),
           duration: Duration(seconds: 1),
         ),
       );
@@ -244,7 +244,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('No URL found in selection'),
+        content: Text('选中文本中未识别到链接'),
         duration: Duration(seconds: 1),
       ),
     );
@@ -289,29 +289,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final shouldOpen = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Open Link'),
+        title: const Text('打开链接'),
         content: Text(url),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text('取消'),
           ),
           TextButton(
             onPressed: () {
               Clipboard.setData(ClipboardData(text: url));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Link copied'),
+                  content: Text('链接已复制'),
                   duration: Duration(seconds: 1),
                 ),
               );
               Navigator.pop(ctx, false);
             },
-            child: const Text('Copy'),
+            child: const Text('复制'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Open'),
+            child: const Text('打开'),
           ),
         ],
       ),
@@ -336,7 +336,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Hermes Agent Onboarding'),
+        title: const Text('Hermes Agent 初始化引导'),
         leading: widget.isFirstRun
             ? null
             : IconButton(
@@ -347,17 +347,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.copy),
-            tooltip: 'Copy',
+            tooltip: '复制',
             onPressed: _copySelection,
           ),
           IconButton(
             icon: const Icon(Icons.open_in_browser),
-            tooltip: 'Open URL',
+            tooltip: '打开链接',
             onPressed: _openSelection,
           ),
           IconButton(
             icon: const Icon(Icons.paste),
-            tooltip: 'Paste',
+            tooltip: '粘贴',
             onPressed: _paste,
           ),
         ],
@@ -372,7 +372,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('Starting onboarding...'),
+                    Text('正在启动引导流程...'),
                   ],
                 ),
               ),
@@ -404,10 +404,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             _error = null;
                             _finished = false;
                           });
-                          _startOnboarding();
-                        },
+                        _startOnboarding();
+                      },
                         icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
+                        label: const Text('重试'),
                       ),
                     ],
                   ),
@@ -443,12 +443,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ? FilledButton.icon(
                         onPressed: _goToDashboard,
                         icon: const Icon(Icons.dashboard),
-                        label: const Text('Go to Dashboard'),
+                        label: const Text('进入控制台'),
                       )
                     : FilledButton.icon(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.check),
-                        label: const Text('Done'),
+                        label: const Text('完成'),
                       ),
               ),
             ),

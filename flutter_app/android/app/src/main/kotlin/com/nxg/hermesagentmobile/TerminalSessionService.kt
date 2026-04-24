@@ -78,10 +78,10 @@ class TerminalSessionService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 GatewayService.CHANNEL_ID,
-                "Hermes Agent Gateway",
+                "Hermes Agent 网关",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps the Hermes Agent gateway running in the background"
+                description = "保持 Hermes Agent 网关在后台持续运行"
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -97,8 +97,8 @@ class TerminalSessionService : Service() {
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, GatewayService.CHANNEL_ID)
-                .setContentTitle("Hermes Agent Terminal")
-                .setContentText("Terminal session active")
+                .setContentTitle("Hermes Agent 终端")
+                .setContentText("终端会话进行中")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
@@ -106,8 +106,8 @@ class TerminalSessionService : Service() {
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
-                .setContentTitle("Hermes Agent Terminal")
-                .setContentText("Terminal session active")
+                .setContentTitle("Hermes Agent 终端")
+                .setContentText("终端会话进行中")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)

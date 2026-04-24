@@ -29,7 +29,7 @@ class GatewayControls extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        'Gateway',
+                        '网关',
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -53,13 +53,13 @@ class GatewayControls extends StatelessWidget {
                       ),
                       IconButton(
                         icon: const Icon(Icons.copy, size: 18),
-                        tooltip: 'Copy URL',
+                        tooltip: '复制地址',
                         onPressed: () {
                           final url = state.dashboardUrl ?? AppConstants.gatewayUrl;
                           Clipboard.setData(ClipboardData(text: url));
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('URL copied to clipboard'),
+                              content: Text('地址已复制到剪贴板'),
                               duration: Duration(seconds: 2),
                             ),
                           );
@@ -67,7 +67,7 @@ class GatewayControls extends StatelessWidget {
                       ),
                       IconButton(
                         icon: const Icon(Icons.open_in_new, size: 18),
-                        tooltip: 'Open dashboard',
+                        tooltip: '打开控制台',
                         onPressed: () {
                           final url = Uri.tryParse(state.dashboardUrl ?? AppConstants.gatewayUrl);
                           if (url != null) {
@@ -92,20 +92,20 @@ class GatewayControls extends StatelessWidget {
                       FilledButton.icon(
                         onPressed: () => provider.start(),
                         icon: const Icon(Icons.play_arrow),
-                        label: const Text('Start Gateway'),
+                        label: const Text('启动网关'),
                       ),
                     if (state.isRunning || state.status == GatewayStatus.starting)
                       OutlinedButton.icon(
                         onPressed: () => provider.stop(),
                         icon: const Icon(Icons.stop),
-                        label: const Text('Stop Gateway'),
+                        label: const Text('停止网关'),
                       ),
                     OutlinedButton.icon(
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const LogsScreen()),
                       ),
                       icon: const Icon(Icons.article_outlined),
-                      label: const Text('View Logs'),
+                      label: const Text('查看日志'),
                     ),
                   ],
                 ),
@@ -125,19 +125,19 @@ class GatewayControls extends StatelessWidget {
     switch (status) {
       case GatewayStatus.running:
         color = AppColors.statusGreen;
-        label = 'Running';
+        label = '运行中';
         icon = Icons.check_circle_outline;
       case GatewayStatus.starting:
         color = AppColors.statusAmber;
-        label = 'Starting';
+        label = '启动中';
         icon = Icons.hourglass_top;
       case GatewayStatus.error:
         color = AppColors.statusRed;
-        label = 'Error';
+        label = '错误';
         icon = Icons.error_outline;
       case GatewayStatus.stopped:
         color = AppColors.statusGrey;
-        label = 'Stopped';
+        label = '已停止';
         icon = Icons.circle_outlined;
     }
 

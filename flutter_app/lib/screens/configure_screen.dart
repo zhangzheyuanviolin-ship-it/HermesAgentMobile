@@ -85,11 +85,11 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
       configureArgs.removeLast(); // remove '/bin/bash'
       configureArgs.addAll([
         '/bin/bash', '-lc',
-        'echo "=== Hermes Agent Configure ===" && '
-        'echo "Manage your gateway settings." && '
+        'echo "=== Hermes Agent 环境配置 ===" && '
+        'echo "请按需调整网关配置。" && '
         'echo "" && '
         'cd /root/hermes-agent && source venv/bin/activate && python -m hermes_cli.main setup; '
-        'echo "" && echo "Configuration complete! You can close this screen."',
+        'echo "" && echo "配置完成！您现在可以关闭此页面。"',
       ]);
 
       _pty = Pty.start(
@@ -105,7 +105,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
       });
 
       _pty!.exitCode.then((code) {
-        _terminal.write('\r\n[Configure exited with code $code]\r\n');
+        _terminal.write('\r\n[配置流程退出，代码 $code]\r\n');
         if (mounted) {
           setState(() => _finished = true);
         }
@@ -136,7 +136,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
     } catch (e) {
       setState(() {
         _loading = false;
-        _error = 'Failed to start configure: $e';
+        _error = '启动配置流程失败: $e';
       });
     }
   }
@@ -195,10 +195,10 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
     if (url != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Copied to clipboard'),
+          content: const Text('已复制到剪贴板'),
           duration: const Duration(seconds: 3),
           action: SnackBarAction(
-            label: 'Open',
+            label: '打开',
             onPressed: () {
               final uri = Uri.tryParse(url);
               if (uri != null) {
@@ -211,7 +211,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Copied to clipboard'),
+          content: Text('已复制到剪贴板'),
           duration: Duration(seconds: 1),
         ),
       );
@@ -232,7 +232,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('No URL found in selection'),
+        content: Text('选中文本中未识别到链接'),
         duration: Duration(seconds: 1),
       ),
     );
@@ -249,7 +249,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Hermes Agent Configure'),
+        title: const Text('Hermes Agent 环境配置'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -258,17 +258,17 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.copy),
-            tooltip: 'Copy',
+            tooltip: '复制',
             onPressed: _copySelection,
           ),
           IconButton(
             icon: const Icon(Icons.open_in_browser),
-            tooltip: 'Open URL',
+            tooltip: '打开链接',
             onPressed: _openSelection,
           ),
           IconButton(
             icon: const Icon(Icons.paste),
-            tooltip: 'Paste',
+            tooltip: '粘贴',
             onPressed: _paste,
           ),
         ],
@@ -283,7 +283,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('Starting configure...'),
+                    Text('正在启动配置流程...'),
                   ],
                 ),
               ),
@@ -318,7 +318,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
                           _startConfigure();
                         },
                         icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
+                        label: const Text('重试'),
                       ),
                     ],
                   ),
@@ -352,7 +352,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
                 child: FilledButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.check),
-                  label: const Text('Done'),
+                  label: const Text('完成'),
                 ),
               ),
             ),

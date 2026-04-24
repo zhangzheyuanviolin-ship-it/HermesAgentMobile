@@ -91,7 +91,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       });
 
       _pty!.exitCode.then((code) {
-        _terminal.write('\r\n[Shell exited with code $code]\r\n');
+        _terminal.write('\r\n[终端退出，代码 $code]\r\n');
       });
 
       _terminal.onOutput = (data) {
@@ -119,7 +119,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     } catch (e) {
       setState(() {
         _loading = false;
-        _error = 'Failed to start shell: $e';
+        _error = '启动终端失败: $e';
       });
     }
   }
@@ -173,10 +173,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (url != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Copied to clipboard'),
+          content: const Text('已复制到剪贴板'),
           duration: const Duration(seconds: 3),
           action: SnackBarAction(
-            label: 'Open',
+            label: '打开',
             onPressed: () {
               final uri = Uri.tryParse(url);
               if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -187,7 +187,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Copied to clipboard'),
+          content: Text('已复制到剪贴板'),
           duration: Duration(seconds: 1),
         ),
       );
@@ -207,7 +207,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('No URL found in selection'),
+        content: Text('选中文本中未识别到链接'),
         duration: Duration(seconds: 1),
       ),
     );
@@ -224,7 +224,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Terminal'),
+        title: const Text('终端'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -233,17 +233,17 @@ class _TerminalScreenState extends State<TerminalScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.copy),
-            tooltip: 'Copy',
+            tooltip: '复制',
             onPressed: _copySelection,
           ),
           IconButton(
             icon: const Icon(Icons.open_in_browser),
-            tooltip: 'Open URL',
+            tooltip: '打开链接',
             onPressed: _openSelection,
           ),
           IconButton(
             icon: const Icon(Icons.paste),
-            tooltip: 'Paste',
+            tooltip: '粘贴',
             onPressed: _paste,
           ),
         ],
@@ -258,7 +258,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('Starting terminal...'),
+                    Text('正在启动终端...'),
                   ],
                 ),
               ),
@@ -292,7 +292,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                           _startShell();
                         },
                         icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
+                        label: const Text('重试'),
                       ),
                     ],
                   ),

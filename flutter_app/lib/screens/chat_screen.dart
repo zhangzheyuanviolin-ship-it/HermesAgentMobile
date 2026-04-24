@@ -1,7 +1,31 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path_pkg;
 import 'package:uuid/uuid.dart';
 import '../models/chat_session_models.dart';
 import '../services/chat_service.dart';
+import '../services/chat_session_store.dart';
+import '../services/native_bridge.dart';
+import 'chat_sessions_screen.dart';
+
+class _PendingAttachment {
+  final String id;
+  final String name;
+  final String hostPath;
+  final String guestPath;
+  final int sizeBytes;
+
+  const _PendingAttachment({
+    required this.id,
+    required this.name,
+    required this.hostPath,
+    required this.guestPath,
+    required this.sizeBytes,
+  });
+}
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -14,12 +38,24 @@ class _ChatScreenState extends State<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _chatService = ChatService();
+  final _sessionStore = ChatSessionStore();
   final _uuid = const Uuid();
+  final _imagePicker = ImagePicker();
 
-  final List<ChatTurn> _turns = [];
+  List<ChatSession> _sessions = [];
+  String? _currentSessionId;
+  List<ChatTurn> _turns = [];
+  List<_PendingAttachment> _pendingAttachments = [];
 
+  bool _loadingSessions = true;
   bool _sending = false;
-  bool _showProcess = false;
+  bool _showProcess = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessions();
+  }
 
   @override
   void dispose() {
@@ -29,29 +65,146 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  Future<void> _loadSessions({String? preferredSessionId}) async {
+    final data = await _sessionStore.loadStore();
+    var sessions = data.sessions;
+    var targetId = preferredSessionId ?? data.lastSessionId;
+
+    if (sessions.isEmpty) {
+      final now = DateTime.now().toUtc();
+      final first = ChatSession(
+        id: _uuid.v4(),
+        title: '新聊天',
+        createdAt: now,
+        updatedAt: now,
+        turns: const [],
+      );
+      sessions = [first];
+      targetId = first.id;
+      await _sessionStore.saveStore(
+        sessions: sessions,
+        lastSessionId: targetId,
+      );
+    }
+
+    ChatSession selected;
+    if (targetId != null) {
+      selected = sessions.firstWhere(
+        (s) => s.id == targetId,
+        orElse: () => sessions.first,
+      );
+    } else {
+      selected = sessions.first;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _sessions = sessions;
+      _currentSessionId = selected.id;
+      _turns = List<ChatTurn>.from(selected.turns);
+      _pendingAttachments = [];
+      _loadingSessions = false;
+    });
+  }
+
   List<ChatHistoryMessage> _buildHistory() {
     final messages = <ChatHistoryMessage>[];
     for (final turn in _turns) {
       messages.add(ChatHistoryMessage(role: 'user', content: turn.userPrompt));
       if (turn.assistantFinal.trim().isNotEmpty) {
-        messages.add(
-          ChatHistoryMessage(role: 'assistant', content: turn.assistantFinal),
-        );
+        messages.add(ChatHistoryMessage(role: 'assistant', content: turn.assistantFinal));
       }
     }
     return messages;
   }
 
-  Future<void> _send() async {
-    final text = _inputController.text.trim();
-    if (text.isEmpty || _sending) return;
+  String _autoTitleFromTurns(ChatSession session) {
+    if (session.isTitleManuallySet) return session.title;
+    if (_turns.isEmpty) return '新聊天';
+    final first = _turns.first.userPrompt
+        .replaceAll('\n', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (first.isEmpty) return '新聊天';
+    return first.length > 18 ? '${first.substring(0, 18)}...' : first;
+  }
 
+  Future<void> _persistCurrentSession() async {
+    if (_currentSessionId == null) return;
+    final index = _sessions.indexWhere((s) => s.id == _currentSessionId);
+    if (index < 0) return;
+
+    final current = _sessions[index];
+    final updated = current.copyWith(
+      title: _autoTitleFromTurns(current),
+      updatedAt: DateTime.now().toUtc(),
+      turns: List<ChatTurn>.from(_turns),
+    );
+
+    _sessions[index] = updated;
+    await _sessionStore.saveStore(
+      sessions: _sessions,
+      lastSessionId: _currentSessionId,
+    );
+  }
+
+  Future<void> _openSessionManager() async {
+    if (_sending) return;
+    await _persistCurrentSession();
+    if (!mounted) return;
+    final selectedId = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => ChatSessionsScreen(
+          store: _sessionStore,
+          currentSessionId: _currentSessionId,
+        ),
+      ),
+    );
+    await _loadSessions(preferredSessionId: selectedId);
+  }
+
+  Future<void> _createNewSession() async {
+    if (_sending) return;
+    await _persistCurrentSession();
+    final now = DateTime.now().toUtc();
+    final session = ChatSession(
+      id: _uuid.v4(),
+      title: '新聊天',
+      createdAt: now,
+      updatedAt: now,
+      turns: const [],
+    );
+    setState(() {
+      _sessions = [session, ..._sessions];
+      _currentSessionId = session.id;
+      _turns = [];
+      _pendingAttachments = [];
+    });
+    await _sessionStore.saveStore(
+      sessions: _sessions,
+      lastSessionId: session.id,
+    );
+  }
+
+  Future<void> _send() async {
+    if (_loadingSessions || _sending) return;
+
+    final rawText = _inputController.text.trim();
+    if (rawText.isEmpty && _pendingAttachments.isEmpty) return;
+
+    final userText = rawText.isEmpty ? '请先分析我上传的附件，并告诉我关键结论。' : rawText;
+    final attachments = List<_PendingAttachment>.from(_pendingAttachments);
+    final prompt = _composePrompt(userText, attachments);
     final history = _buildHistory();
+
     _inputController.clear();
+    setState(() {
+      _pendingAttachments = [];
+    });
 
     final newTurn = ChatTurn(
       id: _uuid.v4(),
-      userPrompt: text,
+      userPrompt: prompt,
       isStreaming: true,
     );
 
@@ -59,13 +212,13 @@ class _ChatScreenState extends State<ChatScreen> {
       _sending = true;
       _turns.add(newTurn);
     });
-
+    await _persistCurrentSession();
     _scrollToBottom();
 
     try {
       await for (final update in _chatService.streamChat(
         history: history,
-        userPrompt: text,
+        userPrompt: prompt,
         model: 'hermes-agent',
       )) {
         final idx = _turns.indexWhere((t) => t.id == newTurn.id);
@@ -78,7 +231,6 @@ class _ChatScreenState extends State<ChatScreen> {
             isStreaming: !update.done,
           );
         });
-
         _scrollToBottom();
       }
     } catch (e) {
@@ -95,8 +247,28 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() => _sending = false);
       }
+      await _persistCurrentSession();
       _scrollToBottom();
     }
+  }
+
+  String _composePrompt(String text, List<_PendingAttachment> attachments) {
+    if (attachments.isEmpty) return text;
+    final sb = StringBuffer();
+    sb.writeln(text);
+    sb.writeln();
+    sb.writeln('[附件信息]');
+    for (int i = 0; i < attachments.length; i++) {
+      final a = attachments[i];
+      sb.writeln('${i + 1}. 文件名: ${a.name}');
+      sb.writeln('   容器路径: ${a.guestPath}');
+      sb.writeln('   宿主路径: ${a.hostPath}');
+    }
+    sb.writeln();
+    sb.writeln('请优先在“容器路径”读取附件。');
+    sb.writeln('你运行在 Hermes Agent 的 Linux 容器环境里，可直接访问 /root 下路径。');
+    sb.writeln('如需要检查共享存储，也可查看 /sdcard、/storage、/storage/emulated/0。');
+    return sb.toString().trim();
   }
 
   void _scrollToBottom() {
@@ -108,6 +280,173 @@ class _ChatScreenState extends State<ChatScreen> {
         curve: Curves.easeOut,
       );
     });
+  }
+
+  String _escapeForBashSingleQuote(String input) {
+    return input.replaceAll("'", "'\"'\"'");
+  }
+
+  String _safeName(String raw) {
+    final name = raw
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_')
+        .trim();
+    if (name.isEmpty) return 'attachment.bin';
+    return name.length > 60 ? name.substring(0, 60) : name;
+  }
+
+  Future<_PendingAttachment> _storeAttachment({
+    String? sourcePath,
+    Uint8List? bytes,
+    required String originalName,
+  }) async {
+    if (_currentSessionId == null) {
+      throw Exception('当前会话不可用，无法添加附件');
+    }
+    if (sourcePath == null && bytes == null) {
+      throw Exception('附件数据为空');
+    }
+
+    final filesDir = await NativeBridge.getFilesDir();
+    final safeName = _safeName(originalName);
+    final unique = '${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}';
+    final fileName = '${unique}_$safeName';
+
+    final hostDir = Directory(
+      '$filesDir/rootfs/ubuntu/root/.hermes_mobile_uploads/$_currentSessionId',
+    );
+    await hostDir.create(recursive: true);
+
+    final target = File('${hostDir.path}/$fileName');
+    if (sourcePath != null) {
+      await File(sourcePath).copy(target.path);
+    } else {
+      await target.writeAsBytes(bytes!, flush: true);
+    }
+
+    final guestPath = '/root/.hermes_mobile_uploads/$_currentSessionId/$fileName';
+    final checkCmd = "test -f '${_escapeForBashSingleQuote(guestPath)}' && echo ok";
+    await NativeBridge.runInProot(checkCmd, timeout: 30);
+
+    final size = await target.length();
+    return _PendingAttachment(
+      id: _uuid.v4(),
+      name: originalName,
+      hostPath: target.path,
+      guestPath: guestPath,
+      sizeBytes: size,
+    );
+  }
+
+  Future<void> _pickFromCamera() async {
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+      );
+      if (file == null) return;
+
+      final attachment = await _storeAttachment(
+        sourcePath: file.path,
+        originalName: file.name.isNotEmpty ? file.name : path_pkg.basename(file.path),
+      );
+      if (!mounted) return;
+      setState(() => _pendingAttachments = [..._pendingAttachments, attachment]);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('拍照添加失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final file = await _imagePicker.pickMedia();
+      if (file == null) return;
+
+      final attachment = await _storeAttachment(
+        sourcePath: file.path,
+        originalName: file.name.isNotEmpty ? file.name : path_pkg.basename(file.path),
+      );
+      if (!mounted) return;
+      setState(() => _pendingAttachments = [..._pendingAttachments, attachment]);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('相册添加失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickFromFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final added = <_PendingAttachment>[];
+      for (final file in result.files) {
+        final name = file.name;
+        if (file.path != null && file.path!.isNotEmpty) {
+          added.add(await _storeAttachment(
+            sourcePath: file.path!,
+            originalName: name,
+          ));
+        } else if (file.bytes != null) {
+          added.add(await _storeAttachment(
+            bytes: file.bytes!,
+            originalName: name,
+          ));
+        }
+      }
+
+      if (!mounted || added.isEmpty) return;
+      setState(() => _pendingAttachments = [..._pendingAttachments, ...added]);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('文件添加失败: $e')),
+      );
+    }
+  }
+
+  Future<void> _showAttachmentActions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('拍照添加'),
+              onTap: () async {
+                Navigator.of(ctx).pop();
+                await _pickFromCamera();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('从相册选择'),
+              onTap: () async {
+                Navigator.of(ctx).pop();
+                await _pickFromGallery();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open_outlined),
+              title: const Text('从文件选择器添加'),
+              onTap: () async {
+                Navigator.of(ctx).pop();
+                await _pickFromFiles();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildTurnCard(ChatTurn turn, ThemeData theme) {
@@ -140,9 +479,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               const SizedBox(height: 6),
               SelectableText(
-                processText.isNotEmpty
-                    ? processText
-                    : (isStreaming ? '正在分析与执行中...' : '（无过程输出）'),
+                processText.isNotEmpty ? processText : (isStreaming ? '正在分析与执行中...' : '（无过程输出）'),
               ),
             ],
             const SizedBox(height: 12),
@@ -154,9 +491,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(height: 6),
             SelectableText(
-              finalText.isNotEmpty
-                  ? finalText
-                  : (isStreaming ? '正在生成最终回复...' : '（无最终回复内容）'),
+              finalText.isNotEmpty ? finalText : (isStreaming ? '正在生成最终回复...' : '（无最终回复内容）'),
             ),
             if (turn.error != null && turn.error!.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -171,88 +506,142 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Widget _buildAttachmentChip(_PendingAttachment attachment) {
+    final sizeKb = (attachment.sizeBytes / 1024).toStringAsFixed(1);
+    return InputChip(
+      label: Text('${attachment.name} (${sizeKb}KB)'),
+      avatar: const Icon(Icons.attach_file, size: 18),
+      onDeleted: _sending
+          ? null
+          : () {
+              setState(() {
+                _pendingAttachments = _pendingAttachments
+                    .where((a) => a.id != attachment.id)
+                    .toList();
+              });
+            },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final currentTitle = _sessions
+            .firstWhere(
+              (s) => s.id == _currentSessionId,
+              orElse: () => ChatSession(
+                id: '',
+                title: '聊天',
+                createdAt: DateTime.now().toUtc(),
+                updatedAt: DateTime.now().toUtc(),
+              ),
+            )
+            .title;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('聊天'),
+        title: Text(currentTitle),
         actions: [
+          IconButton(
+            tooltip: '会话管理',
+            icon: const Icon(Icons.history),
+            onPressed: _sending ? null : _openSessionManager,
+          ),
           IconButton(
             tooltip: _showProcess ? '隐藏过程' : '显示过程',
             icon: Icon(_showProcess ? Icons.visibility_off : Icons.visibility),
             onPressed: () => setState(() => _showProcess = !_showProcess),
           ),
           IconButton(
-            tooltip: '清空',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: _sending
-                ? null
-                : () => setState(() {
-                      _turns.clear();
-                    }),
+            tooltip: '新建聊天',
+            icon: const Icon(Icons.add_comment_outlined),
+            onPressed: _sending ? null : _createNewSession,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _turns.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        '先在首页启动 Gateway，并在“模型与 API 设置”里完成模型配置后，再在这里发送消息。',
-                        textAlign: TextAlign.center,
-                      ),
+      body: _loadingSessions
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Expanded(
+                  child: _turns.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text(
+                              '先在首页启动 Gateway，并在“模型与 API 设置”里完成模型配置后，再在这里发送消息。',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _turns.length,
+                          itemBuilder: (context, index) {
+                            return _buildTurnCard(_turns[index], theme);
+                          },
+                        ),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _sending ? null : _showAttachmentActions,
+                          icon: const Icon(Icons.attach_file),
+                          label: Text(
+                            _pendingAttachments.isEmpty
+                                ? '添加附件'
+                                : '已添加 ${_pendingAttachments.length} 个附件',
+                          ),
+                        ),
+                        if (_pendingAttachments.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: _pendingAttachments.map(_buildAttachmentChip).toList(),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _inputController,
+                                enabled: !_sending,
+                                minLines: 1,
+                                maxLines: 6,
+                                textInputAction: TextInputAction.newline,
+                                decoration: const InputDecoration(
+                                  hintText: '输入您的任务或问题...',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: _sending ? null : _send,
+                              child: _sending
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.send),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _turns.length,
-                    itemBuilder: (context, index) {
-                      return _buildTurnCard(_turns[index], theme);
-                    },
                   ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _inputController,
-                      enabled: !_sending,
-                      minLines: 1,
-                      maxLines: 6,
-                      textInputAction: TextInputAction.newline,
-                      decoration: const InputDecoration(
-                        hintText: '输入您的任务或问题...',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _sending ? null : _send,
-                    child: _sending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }

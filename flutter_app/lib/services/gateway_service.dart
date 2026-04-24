@@ -50,13 +50,13 @@ class GatewayService {
       _startingAt = DateTime.now();
       _updateState(_state.copyWith(
         status: GatewayStatus.starting,
-        logs: [..._state.logs, _ts('[INFO] Gateway process detected, reconnecting...')],
+        logs: [..._state.logs, _ts('[信息] 检测到网关进程，正在重新连接...')],
       ));
       _subscribeLogs();
       _startHealthCheck();
     } else if (prefs.autoStartGateway) {
       _updateState(_state.copyWith(
-        logs: [..._state.logs, _ts('[INFO] Auto-starting gateway...')],
+        logs: [..._state.logs, _ts('[信息] 正在自动启动网关...')],
       ));
       await start();
     }
@@ -80,7 +80,7 @@ class GatewayService {
     _updateState(_state.copyWith(
       status: GatewayStatus.starting,
       clearError: true,
-      logs: [..._state.logs, _ts('[INFO] Starting gateway...')],
+      logs: [..._state.logs, _ts('[信息] 正在启动网关...')],
     ));
 
     try {
@@ -108,8 +108,8 @@ class GatewayService {
     } catch (e) {
       _updateState(_state.copyWith(
         status: GatewayStatus.error,
-        errorMessage: 'Failed to start: $e',
-        logs: [..._state.logs, _ts('[ERROR] Failed to start: $e')],
+        errorMessage: '启动失败: $e',
+        logs: [..._state.logs, _ts('[错误] 启动失败: $e')],
       ));
     } finally {
       _startInProgress = false;
@@ -125,12 +125,12 @@ class GatewayService {
       await NativeBridge.stopGateway();
       _updateState(GatewayState(
         status: GatewayStatus.stopped,
-        logs: [..._state.logs, _ts('[INFO] Gateway stopped')],
+        logs: [..._state.logs, _ts('[信息] 网关已停止')],
       ));
     } catch (e) {
       _updateState(_state.copyWith(
         status: GatewayStatus.error,
-        errorMessage: 'Failed to stop: $e',
+        errorMessage: '停止失败: $e',
       ));
     }
   }
@@ -162,20 +162,20 @@ class GatewayService {
         _updateState(_state.copyWith(
           status: GatewayStatus.running,
           startedAt: DateTime.now(),
-          logs: [..._state.logs, _ts('[INFO] Gateway is running')],
+          logs: [..._state.logs, _ts('[信息] 网关运行中')],
         ));
       } else if (!isRunning && _state.status != GatewayStatus.stopped) {
         if (_startingAt != null &&
             _state.status == GatewayStatus.starting &&
-            DateTime.now().difference(_startingAt!).inSeconds < 120) {
+            DateTime.now().difference(_startingAt!).inSeconds < 3600) {
           _updateState(_state.copyWith(
-            logs: [..._state.logs, _ts('[INFO] Starting, waiting for gateway...')],
+            logs: [..._state.logs, _ts('[信息] 启动中，等待网关就绪...')],
           ));
           return;
         }
         _updateState(_state.copyWith(
           status: GatewayStatus.stopped,
-          logs: [..._state.logs, _ts('[WARN] Gateway process not running')],
+          logs: [..._state.logs, _ts('[警告] 网关进程未运行')],
         ));
         _cancelAllTimers();
       }
@@ -184,15 +184,15 @@ class GatewayService {
       if (!isRunning && _state.status != GatewayStatus.stopped) {
         if (_startingAt != null &&
             _state.status == GatewayStatus.starting &&
-            DateTime.now().difference(_startingAt!).inSeconds < 120) {
+            DateTime.now().difference(_startingAt!).inSeconds < 3600) {
           _updateState(_state.copyWith(
-            logs: [..._state.logs, _ts('[INFO] Starting, waiting for gateway...')],
+            logs: [..._state.logs, _ts('[信息] 启动中，等待网关就绪...')],
           ));
           return;
         }
         _updateState(_state.copyWith(
           status: GatewayStatus.stopped,
-          logs: [..._state.logs, _ts('[WARN] Gateway process not running')],
+          logs: [..._state.logs, _ts('[警告] 网关进程未运行')],
         ));
         _cancelAllTimers();
       }

@@ -17,7 +17,7 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  String _status = 'Loading...';
+  String _status = '加载中...';
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
   static const String _repairHermesDepsCommand =
@@ -61,7 +61,7 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 500));
 
     try {
-      setState(() => _status = 'Checking setup status...');
+      setState(() => _status = '正在检查初始化状态...');
 
       try { await NativeBridge.setupDirs(); } catch (_) {}
       try { await NativeBridge.writeResolv(); } catch (_) {}
@@ -129,14 +129,14 @@ class _SplashScreenState extends State<SplashScreen>
 
           if (rootfsOk && bashOk) {
             if (!pythonOk) {
-              setState(() => _status = 'Reinstalling Python...');
+              setState(() => _status = '正在重装 Python...');
               await NativeBridge.runInProot(
                 'apt-get update -y && apt-get install -y python3 python3-venv python3-pip',
                 timeout: 600,
               );
             }
             if (!hermesOk) {
-              setState(() => _status = 'Reinstalling Hermes Agent...');
+              setState(() => _status = '正在重装 Hermes Agent...');
               await NativeBridge.runInProot(
                 _repairHermesDepsCommand,
                 timeout: 1800,
@@ -161,7 +161,7 @@ class _SplashScreenState extends State<SplashScreen>
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _status = 'Error: $e');
+        setState(() => _status = '错误: $e');
       }
     }
   }
@@ -192,14 +192,14 @@ class _SplashScreenState extends State<SplashScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'AI Gateway for Android',
+                'Android 智能体网关',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                'by ${AppConstants.authorName} | ${AppConstants.orgName}',
+                '作者 ${AppConstants.authorName} | ${AppConstants.orgName}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),

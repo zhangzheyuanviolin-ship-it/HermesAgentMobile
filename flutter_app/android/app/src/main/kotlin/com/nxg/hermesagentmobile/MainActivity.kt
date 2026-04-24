@@ -284,7 +284,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "showUrlNotification" -> {
                     val url = call.argument<String>("url")
-                    val title = call.argument<String>("title") ?: "URL Detected"
+                    val title = call.argument<String>("title") ?: "检测到链接"
                     if (url != null) {
                         showUrlNotification(url, title)
                         result.success(true)
@@ -296,7 +296,7 @@ class MainActivity : FlutterActivity() {
                     val text = call.argument<String>("text")
                     if (text != null) {
                         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("URL", text))
+                        clipboard.setPrimaryClip(ClipData.newPlainText("链接", text))
                         result.success(true)
                     } else {
                         result.error("INVALID_ARGS", "text required", null)
@@ -503,10 +503,10 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 URL_CHANNEL_ID,
-                "Hermes Agent URLs",
+                "Hermes Agent 链接通知",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Notifications for detected URLs"
+                description = "检测到链接时的通知"
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)

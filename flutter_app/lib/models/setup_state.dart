@@ -42,21 +42,21 @@ class SetupState {
   String get stepLabel {
     switch (step) {
       case SetupStep.checkingStatus:
-        return 'Checking status...';
+        return '正在检查状态...';
       case SetupStep.downloadingRootfs:
-        return 'Downloading Ubuntu rootfs';
+        return '正在下载 Ubuntu rootfs';
       case SetupStep.extractingRootfs:
-        return 'Extracting rootfs';
+        return '正在解压 rootfs';
       case SetupStep.installingPython:
-        return 'Installing Python';
+        return '正在安装 Python';
       case SetupStep.installingHermesAgent:
-        return 'Installing Hermes Agent';
+        return '正在安装 Hermes Agent';
       case SetupStep.configuringEnvironment:
-        return 'Configuring environment';
+        return '正在配置环境';
       case SetupStep.complete:
-        return 'Setup complete';
+        return '初始化完成';
       case SetupStep.error:
-        return 'Error';
+        return '错误';
     }
   }
 
