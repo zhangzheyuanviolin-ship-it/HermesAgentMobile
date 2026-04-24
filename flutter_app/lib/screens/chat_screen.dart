@@ -361,7 +361,38 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickFromGallery() async {
     try {
-      final file = await _imagePicker.pickMedia();
+      final type = await showModalBottomSheet<String>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_outlined),
+                title: const Text('选择照片'),
+                onTap: () => Navigator.of(ctx).pop('image'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.videocam_outlined),
+                title: const Text('选择视频'),
+                onTap: () => Navigator.of(ctx).pop('video'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (!mounted || type == null) return;
+
+      XFile? file;
+      if (type == 'video') {
+        file = await _imagePicker.pickVideo(
+          source: ImageSource.gallery,
+        );
+      } else {
+        file = await _imagePicker.pickImage(
+          source: ImageSource.gallery,
+        );
+      }
       if (file == null) return;
 
       final attachment = await _storeAttachment(

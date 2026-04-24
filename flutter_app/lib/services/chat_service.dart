@@ -285,7 +285,106 @@ class ChatService {
 
     var cleaned = raw.replaceAll(processRegex, '').trim();
     cleaned = cleaned.replaceAll(finalRegex, '').trim();
-    return _SplitOutput(process: process, finalText: cleaned);
+    final heuristic = _splitHeuristicOutput(cleaned);
+    return _SplitOutput(
+      process: _joinNonEmpty([process, heuristic.process]),
+      finalText: heuristic.finalText,
+    );
+  }
+
+  _SplitOutput _splitHeuristicOutput(String raw) {
+    final normalized = raw.replaceAll('\r\n', '\n').trim();
+    if (normalized.isEmpty) {
+      return const _SplitOutput(process: '', finalText: '');
+    }
+
+    final blocks = normalized
+        .split(RegExp(r'\n\s*\n+'))
+        .map((b) => b.trim())
+        .where((b) => b.isNotEmpty)
+        .toList();
+
+    if (blocks.length < 2) {
+      return _SplitOutput(process: '', finalText: normalized);
+    }
+
+    var pivot = -1;
+    for (var i = 0; i < blocks.length; i++) {
+      if (_looksLikeFinalBlock(blocks[i])) {
+        pivot = i;
+        break;
+      }
+    }
+
+    if (pivot == -1) {
+      var leadingProcessCount = 0;
+      for (final block in blocks) {
+        if (_looksLikeProcessBlock(block)) {
+          leadingProcessCount += 1;
+        } else {
+          break;
+        }
+      }
+
+      if (leadingProcessCount > 0 && leadingProcessCount < blocks.length) {
+        final remaining = blocks.skip(leadingProcessCount).join('\n\n');
+        if (leadingProcessCount >= 2 || _containsFinalSignal(remaining)) {
+          pivot = leadingProcessCount;
+        }
+      }
+    }
+
+    if (pivot <= 0 || pivot >= blocks.length) {
+      return _SplitOutput(process: '', finalText: normalized);
+    }
+
+    final process = blocks.take(pivot).join('\n\n').trim();
+    final finalText = blocks.skip(pivot).join('\n\n').trim();
+    if (finalText.isEmpty) {
+      return _SplitOutput(process: '', finalText: normalized);
+    }
+    return _SplitOutput(process: process, finalText: finalText);
+  }
+
+  bool _looksLikeProcessBlock(String block) {
+    final firstLine = block.split('\n').first.trimLeft();
+    const leadWords = [
+      '好的，我来',
+      '我来操作',
+      '我先',
+      '先',
+      '现在',
+      '接下来',
+      '然后',
+      '随后',
+      '正在',
+      '开始',
+      '确认',
+      '创建',
+      '读取',
+      '删除',
+      '执行',
+      '尝试',
+    ];
+    for (final w in leadWords) {
+      if (firstLine.startsWith(w)) return true;
+    }
+    return block.contains('工具调用:');
+  }
+
+  bool _looksLikeFinalBlock(String block) {
+    final firstLine = block.split('\n').first.trimLeft();
+    final heading = RegExp(r'^(#{1,6}\s*)?(最终|结论|总结|报告|结果|答复|回复|输出|建议|测试报告|测试结论)');
+    if (heading.hasMatch(firstLine)) return true;
+    if (block.contains('测试结论')) return true;
+    if (block.contains('| 步骤 |')) return true;
+    if (block.contains('|------|')) return true;
+    return false;
+  }
+
+  bool _containsFinalSignal(String text) {
+    final signal = RegExp(r'(最终|结论|总结|报告|结果|建议|因此|综上|完成)');
+    return signal.hasMatch(text);
   }
 
   String _joinNonEmpty(List<String> parts) {
@@ -318,7 +417,10 @@ class ChatService {
 
 const String _systemPrompt =
     '你是 Hermes Agent 在 Android 端的助手。'
-    '请尽量把执行过程放在 <assistant_process>...</assistant_process> 中，'
-    '把最终给用户的回答放在 <assistant_final>...</assistant_final> 中。'
+    '你必须严格按以下标签输出，且仅输出这两个区块：'
+    '<assistant_process>...</assistant_process>'
+    '<assistant_final>...</assistant_final>。'
+    '在 assistant_process 中写执行过程、规划、工具动作；'
+    '在 assistant_final 中只写最终答复和结论，禁止出现“先/然后/正在/我来操作”等过程描述。'
     '如果需要访问用户文件，请优先检查 /sdcard、/storage、/storage/emulated/0。'
     '不要在未检查这些路径前直接说无法访问共享存储。';
