@@ -71,7 +71,7 @@ jobs:
         working-directory: flutter_app
         run: |
           flutter build apk --release \
-            --build-name "0.3.10" \
+            --build-name "0.3.11" \
             --build-number "${{ github.run_number }}"
 
       - name: Upload APK artifact

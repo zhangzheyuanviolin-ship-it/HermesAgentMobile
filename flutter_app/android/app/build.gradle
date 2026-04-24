@@ -48,7 +48,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.nxg.hermesagentmobile.test"
+        applicationId = "com.nxg.hermesagentmobile"
         minSdk = 29
         targetSdk = 36
         versionCode = flutterVersionCode.toInteger()
