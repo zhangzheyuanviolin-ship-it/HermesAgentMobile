@@ -15,6 +15,7 @@ import android.os.PowerManager
 import io.flutter.plugin.common.EventChannel
 import java.io.BufferedReader
 import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -151,6 +152,7 @@ class GatewayService : Service() {
                 val filesDir = applicationContext.filesDir.absolutePath
                 val nativeLibDir = applicationContext.applicationInfo.nativeLibraryDir
                 val pm = ProcessManager(filesDir, nativeLibDir)
+                val proxyScript = ensureChatProxyScript(filesDir)
 
                 // Recreate all directories (config, tmp, home, lib, proc/sys fakes)
                 // in case Android cleared them after an app update (#40).
@@ -220,7 +222,8 @@ class GatewayService : Service() {
                         "API_SERVER_ENABLED=true " +
                         "API_SERVER_HOST=127.0.0.1 " +
                         "API_SERVER_PORT=8642 " +
-                        "exec python gateway/run.py"
+                        "HERMES_UPSTREAM_PORT=8643 " +
+                        "exec python ${proxyScript}"
                     )
                 }
                 updateNotificationRunning()
@@ -294,6 +297,23 @@ class GatewayService : Service() {
                 }
             }
         }.also { it.start() }
+    }
+
+    private fun ensureChatProxyScript(filesDir: String): String {
+        val guestPath = "/root/.hermes_mobile_proxy/chat_gateway_proxy.py"
+        val hostFile = File("$filesDir/rootfs/ubuntu$guestPath")
+        if (!hostFile.parentFile.exists()) {
+            hostFile.parentFile.mkdirs()
+        }
+        applicationContext.assets.open("chat_gateway_proxy.py").use { input ->
+            FileOutputStream(hostFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+        hostFile.setReadable(true, false)
+        hostFile.setWritable(true, false)
+        hostFile.setExecutable(true, false)
+        return guestPath
     }
 
     private fun stopGateway() {
