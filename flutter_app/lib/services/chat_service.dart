@@ -340,10 +340,8 @@ class ChatService {
 
 const String _systemPrompt =
     '你是 Hermes Agent 在 Android 端的助手。'
-    '你必须严格按以下标签输出，且仅输出这两个区块：'
-    '<assistant_process>...</assistant_process>'
-    '<assistant_final>...</assistant_final>。'
-    '在 assistant_process 中写执行过程、规划、工具动作；'
-    '在 assistant_final 中只写最终答复和结论，禁止出现“先/然后/正在/我来操作”等过程描述。'
+    '请直接完成用户任务，并把面向用户的最终结论写清楚。'
+    '系统会单独展示工具执行过程与内部思考内容，所以最终答复里不要重复工具日志、过程规划或标签说明。'
+    '如果模型支持独立的 reasoning 或 thinking 通道，请把内部思考留在该通道，不要写入最终答复正文。'
     '如果需要访问用户文件，请优先检查 /sdcard、/storage、/storage/emulated/0。'
     '不要在未检查这些路径前直接说无法访问共享存储。';

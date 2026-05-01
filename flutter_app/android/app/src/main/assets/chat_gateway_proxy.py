@@ -36,6 +36,10 @@ PROCESS_PREFIXES = (
     "然后", "随后", "让我", "我将", "我会", "正在", "开始", "确认", "创建", "读取", "删除",
     "执行", "尝试",
 )
+STRUCTURE_ECHO_RE = re.compile(
+    r"(assistant_process|assistant_final|两区块输出|两个区块|严格按.*区块输出|仅输出这两个区块|只写最终答复|只写最终回复|过程描述)",
+    re.IGNORECASE,
+)
 
 TAG_CLEAN_RE = re.compile(
     r"</?(?:assistant_process|assistant_final|think|thinking|reasoning|thought)\b[^>]*>",
@@ -65,6 +69,31 @@ def extract_any_text(value):
     return ""
 
 
+def decode_entities(raw):
+    return raw.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+
+def collapse_blank_lines(raw):
+    normalized = raw.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
+
+
+def strip_structure_prompt_echo(raw):
+    if not raw:
+        return ""
+    kept_lines = []
+    for line in decode_entities(raw).replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        trimmed = line.strip()
+        if not trimmed:
+            kept_lines.append("")
+            continue
+        if STRUCTURE_ECHO_RE.search(trimmed):
+            continue
+        kept_lines.append(line)
+    return collapse_blank_lines("\n".join(kept_lines))
+
+
 def normalize_lead_line(raw_line):
     line = raw_line.lstrip()
     line = re.sub(r"^[#>\-\*\d\.\)\(\[\]\s]+", "", line)
@@ -82,6 +111,10 @@ def looks_like_final_block(block):
         if lower_first.startswith(word):
             return True
     if "测试结论" in block or "环境详细报告" in block or "总体来看" in block:
+        return True
+    if first_line.startswith(("你好", "您好", "下面是", "以下内容")):
+        return True
+    if lower_first.startswith(("hello", "hi ", "here are")):
         return True
     if "| 步骤 |" in block or "|------|" in block or "| 类别 |" in block or "| 目标 |" in block:
         return True
@@ -104,6 +137,8 @@ def looks_like_process_line(line):
     for word in PROCESS_PREFIXES:
         if lower_first.startswith(word.lower()):
             return True
+    if lower_first.startswith(("用户要求", "我从 memory", "from memory", "i already have", "无需额外工具调用")):
+        return True
     return "工具调用:" in line
 
 
@@ -136,8 +171,8 @@ def split_line_heuristic_output(raw):
     process = "\n".join(process_lines).strip()
     final_text = "\n".join(final_lines).strip()
     if not final_text:
-        return "", raw.strip()
-    return process, final_text
+        return "", sanitize_final_text(raw)
+    return sanitize_process_text(process), sanitize_final_text(final_text)
 
 
 def join_unique_non_empty(parts):
@@ -164,12 +199,21 @@ def remove_tag_wrappers(raw):
     return TAG_CLEAN_RE.sub("", raw)
 
 
+def sanitize_process_text(raw):
+    return collapse_blank_lines(strip_structure_prompt_echo(remove_tag_wrappers(decode_entities(raw))))
+
+
+def sanitize_final_text(raw):
+    return collapse_blank_lines(strip_structure_prompt_echo(remove_tag_wrappers(decode_entities(raw))))
+
+
 def split_structured_output(raw):
-    process_match = re.search(r"<assistant_process\b[^>]*>([\s\S]*?)(?:</assistant_process\s*>|$)", raw, re.IGNORECASE)
-    final_match = re.search(r"<assistant_final\b[^>]*>([\s\S]*?)(?:</assistant_final\s*>|$)", raw, re.IGNORECASE)
+    decoded = decode_entities(raw)
+    process_match = re.search(r"<assistant_process\b[^>]*>([\s\S]*?)(?:</assistant_process\s*>|$)", decoded, re.IGNORECASE)
+    final_match = re.search(r"<assistant_final\b[^>]*>([\s\S]*?)(?:</assistant_final\s*>|$)", decoded, re.IGNORECASE)
     think_matches = re.findall(
         r"<(?:think|thinking|reasoning|thought)\b[^>]*>([\s\S]*?)(?:</(?:think|thinking|reasoning|thought)\s*>|$)",
-        raw,
+        decoded,
         re.IGNORECASE,
     )
     process = process_match.group(1).strip() if process_match else ""
@@ -179,14 +223,14 @@ def split_structured_output(raw):
         process = join_unique_non_empty([process, think_process])
     if final_text or process:
         if not final_text:
-            cleaned = remove_tag_wrappers(raw).strip()
+            cleaned = remove_tag_wrappers(decoded).strip()
             final_text = cleaned
-        return process, final_text
+        return sanitize_process_text(process), sanitize_final_text(final_text)
     return "", ""
 
 
 def split_heuristic_output(raw):
-    normalized = raw.replace("\r\n", "\n").strip()
+    normalized = collapse_blank_lines(raw)
     if not normalized:
         return "", ""
     blocks = [block.strip() for block in re.split(r"\n\s*\n+", normalized) if block.strip()]
@@ -196,7 +240,7 @@ def split_heuristic_output(raw):
         return split_line_heuristic_output(normalized)
     for index, block in enumerate(blocks):
         if looks_like_final_block(block):
-            return "\n\n".join(blocks[:index]).strip(), "\n\n".join(blocks[index:]).strip()
+            return sanitize_process_text("\n\n".join(blocks[:index])), sanitize_final_text("\n\n".join(blocks[index:]))
     leading_process_count = 0
     for block in blocks:
         if looks_like_process_line(block):
@@ -207,23 +251,26 @@ def split_heuristic_output(raw):
         remaining = "\n\n".join(blocks[leading_process_count:])
         if leading_process_count >= 2 or contains_final_signal(remaining):
             return (
-                "\n\n".join(blocks[:leading_process_count]).strip(),
-                remaining.strip(),
+                sanitize_process_text("\n\n".join(blocks[:leading_process_count])),
+                sanitize_final_text(remaining),
             )
     return split_line_heuristic_output(normalized)
 
 
 def split_tagged_output(raw):
-    normalized = raw.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    normalized = decode_entities(raw)
     process, final_text = split_structured_output(normalized)
     if process or final_text:
         return process, final_text
-    cleaned = remove_tag_wrappers(normalized).strip()
+    cleaned = sanitize_final_text(normalized)
     return split_heuristic_output(cleaned)
 
 
 def split_reasoning_output(raw):
-    normalized = remove_tag_wrappers(raw.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")).strip()
+    structured_process, structured_final = split_structured_output(raw)
+    if structured_process or structured_final:
+        return structured_process, structured_final
+    normalized = sanitize_process_text(raw)
     if not normalized:
         return "", ""
     blocks = [block.strip() for block in re.split(r"\n\s*\n+", normalized) if block.strip()]
@@ -233,7 +280,7 @@ def split_reasoning_output(raw):
         return split_line_heuristic_output(normalized)
     for index, block in enumerate(blocks):
         if looks_like_final_block(block):
-            return "\n\n".join(blocks[:index]).strip(), "\n\n".join(blocks[index:]).strip()
+            return sanitize_process_text("\n\n".join(blocks[:index])), sanitize_final_text("\n\n".join(blocks[index:]))
     leading_process_count = 0
     for block in blocks:
         if looks_like_process_line(block):
@@ -244,8 +291,8 @@ def split_reasoning_output(raw):
         remaining = "\n\n".join(blocks[leading_process_count:])
         if leading_process_count >= 2 or contains_final_signal(remaining):
             return (
-                "\n\n".join(blocks[:leading_process_count]).strip(),
-                remaining.strip(),
+                sanitize_process_text("\n\n".join(blocks[:leading_process_count])),
+                sanitize_final_text(remaining),
             )
     line_process, line_final = split_line_heuristic_output(normalized)
     if line_final:
@@ -253,16 +300,48 @@ def split_reasoning_output(raw):
     return normalized, ""
 
 
+def remove_duplicate_prefix(prefix_source, text, minimum_overlap=20):
+    source = prefix_source.strip()
+    target = text.strip()
+    if not source or not target:
+        return target
+    max_overlap = min(len(source), len(target), 500)
+    for size in range(max_overlap, minimum_overlap - 1, -1):
+        if source[-size:] == target[:size]:
+            return target[size:].lstrip()
+    return target
+
+
+def merge_sections(current, incoming):
+    current = current.strip()
+    incoming = incoming.strip()
+    if not current:
+        return incoming
+    if not incoming:
+        return current
+    if current == incoming or current.find(incoming) >= 0:
+        return current
+    if incoming.find(current) >= 0:
+        return incoming
+    merged = remove_duplicate_prefix(current, incoming)
+    if merged != incoming:
+        return (current + merged).strip()
+    merged = remove_duplicate_prefix(incoming, current)
+    if merged != current:
+        return (incoming + merged).strip()
+    return join_unique_non_empty([current, incoming])
+
+
 def derive_sections(reasoning_text, assistant_text):
     assistant_process, assistant_final = split_tagged_output(assistant_text)
     reasoning_body, reasoning_final = split_reasoning_output(reasoning_text)
     final_fallback = assistant_final.strip()
     if not final_fallback and not assistant_process.strip():
-        final_fallback = remove_tag_wrappers(assistant_text).strip()
-    return (
-        join_unique_non_empty([reasoning_body, assistant_process]),
-        join_unique_non_empty([reasoning_final, final_fallback]),
-    )
+        final_fallback = sanitize_final_text(assistant_text)
+    thinking_text = merge_sections(reasoning_body, assistant_process)
+    final_text = merge_sections(reasoning_final, final_fallback)
+    final_text = remove_duplicate_prefix(thinking_text, final_text)
+    return thinking_text, final_text.strip()
 
 
 def emit_sse(handler, event_type, payload):
