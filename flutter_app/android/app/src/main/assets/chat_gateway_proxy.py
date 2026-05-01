@@ -62,6 +62,7 @@ SESSION_LOCK = threading.Lock()
 RUN_LOCK = threading.Lock()
 RUNS = {}
 ACTIVE_RUN_BY_SESSION = {}
+NON_SERIALIZABLE_RUN_KEYS = {"thread", "response"}
 
 
 def now_ms():
@@ -408,6 +409,17 @@ def get_active_run_for_session(session_key):
         return RUNS.get(run_id) if run_id else None
 
 
+def snapshot_run_context(context):
+    if not context:
+        return None
+    data = {}
+    for key, value in context.items():
+        if key in NON_SERIALIZABLE_RUN_KEYS:
+            continue
+        data[key] = copy.deepcopy(value)
+    return data
+
+
 def update_run(run_id, **fields):
     with RUN_LOCK:
         context = RUNS.get(run_id)
@@ -415,7 +427,7 @@ def update_run(run_id, **fields):
             return None
         context.update(fields)
         context["updatedAt"] = now_ms()
-        return copy.deepcopy(context)
+        return snapshot_run_context(context)
 
 
 def clear_active_run(run_id, session_key):
@@ -732,10 +744,10 @@ def wait_for_run_snapshot(run_id, timeout_ms):
         if not context:
             return None, True
         if context.get("completed"):
-            return copy.deepcopy(context), False
+            return snapshot_run_context(context), False
         time.sleep(0.25)
     context = get_run(run_id)
-    return copy.deepcopy(context) if context else None, True
+    return snapshot_run_context(context) if context else None, True
 
 
 def set_json(handler, status, payload):
