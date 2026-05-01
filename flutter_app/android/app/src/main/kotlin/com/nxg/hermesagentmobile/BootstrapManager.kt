@@ -556,9 +556,9 @@ if [ "__DOLLAR__#" -eq 0 ]; then
 fi
 
 cmdline="__DOLLAR__*"
-case "$cmdline" in
+case "__DOLLAR__cmdline" in
   *ubuntu-shell*|*ubuntu-status*|*".openclaw-android/linux-runtime/bin/ubuntu-shell.sh"*|*ANYCLAW_UBUNTU_BIN*)
-    /bin/sh -lc "$cmdline"
+    /bin/sh -lc "__DOLLAR__cmdline"
     exit "__DOLLAR__?"
     ;;
 esac
