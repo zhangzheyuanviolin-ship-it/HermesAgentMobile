@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Hermes Chat</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b1218;
+      --panel: #131d25;
+      --panel-soft: #1a2630;
+      --panel-strong: #0f1820;
+      --line: #24323f;
+      --text: #eef4f7;
+      --muted: #93a8b8;
+      --accent: #f97316;
+      --accent-soft: rgba(249, 115, 22, 0.16);
+      --success: #22c55e;
+      --danger: #ef4444;
+      --info: #38bdf8;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+      --radius: 18px;
+      --font: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --mono: "DejaVu Sans Mono", "Cascadia Code", monospace;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f8fb;
+        --panel: #ffffff;
+        --panel-soft: #f1f5f9;
+        --panel-strong: #ffffff;
+        --line: #d5dee7;
+        --text: #10202d;
+        --muted: #5d7286;
+        --accent: #ea580c;
+        --accent-soft: rgba(234, 88, 12, 0.12);
+        --shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: radial-gradient(circle at top, rgba(56,189,248,0.12), transparent 32%), var(--bg); color: var(--text); font-family: var(--font); }
+    body { min-height: 100vh; }
+    button, textarea, input { font: inherit; }
+    button { cursor: pointer; }
+    .app {
+      display: grid;
+      grid-template-columns: 290px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--panel-strong), var(--panel));
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .brand {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel-soft);
+      box-shadow: var(--shadow);
+    }
+    .brand-title { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: 0.02em; }
+    .brand-subtitle { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .sidebar-tools { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+    .ghost-btn, .solid-btn, .danger-btn, .chip-btn {
+      min-height: 40px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--text);
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+    .ghost-btn:active, .solid-btn:active, .danger-btn:active, .chip-btn:active { transform: translateY(1px); }
+    .solid-btn { background: linear-gradient(135deg, var(--accent), #fb923c); color: white; border-color: transparent; font-weight: 700; }
+    .danger-btn { background: rgba(239, 68, 68, 0.12); color: #fecaca; border-color: rgba(239, 68, 68, 0.34); }
+    .chip-btn { min-height: 36px; padding: 8px 10px; border-radius: 999px; font-size: 13px; }
+    .chip-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+    .sidebar-search {
+      width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line);
+      background: var(--panel-soft); color: var(--text);
+    }
+    .session-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+    .session-card {
+      width: 100%; text-align: left; padding: 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--panel);
+      color: var(--text); box-shadow: var(--shadow);
+    }
+    .session-card.active { border-color: var(--accent); background: linear-gradient(180deg, var(--accent-soft), var(--panel)); }
+    .session-title { margin: 0 0 8px; font-size: 15px; font-weight: 700; }
+    .session-preview { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .session-meta { margin-top: 10px; font-size: 11px; color: var(--muted); }
+    .main {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      gap: 14px;
+      padding: 18px;
+    }
+    .toolbar, .status-strip, .composer-shell {
+      border: 1px solid var(--line);
+      background: rgba(19, 29, 37, 0.88);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+    @media (prefers-color-scheme: light) {
+      .toolbar, .status-strip, .composer-shell { background: rgba(255, 255, 255, 0.92); }
+    }
+    .toolbar { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .toolbar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .toolbar-title { margin: 0; font-size: 22px; font-weight: 800; }
+    .toolbar-subtitle { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .toolbar-actions, .toolbar-row, .composer-actions, .composer-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+    .status-strip { padding: 12px 16px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .status-title { font-weight: 700; }
+    .status-text { color: var(--muted); font-size: 13px; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 8px 12px; border: 1px solid var(--line); background: var(--panel-soft); font-size: 13px;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+    .dot.ok { background: var(--success); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.12); }
+    .dot.busy { background: var(--info); box-shadow: 0 0 0 6px rgba(56, 189, 248, 0.12); }
+    .dot.fail { background: var(--danger); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12); }
+    .conversation {
+      min-height: 0; overflow: auto; padding: 8px 4px 120px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .empty {
+      padding: 42px 20px; border: 1px dashed var(--line); border-radius: 20px; text-align: center; color: var(--muted); background: rgba(255,255,255,0.02);
+    }
+    .message { display: flex; }
+    .message.user { justify-content: flex-end; }
+    .message.assistant, .message.system { justify-content: flex-start; }
+    .card {
+      max-width: min(860px, 92%);
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+    }
+    .message.user .card { background: linear-gradient(135deg, var(--accent), #fb923c); color: #fff; border-color: transparent; }
+    .message.system .card { background: var(--panel-soft); }
+    .message.system.thinking .card { border-left: 4px solid #38bdf8; }
+    .message.system.toolcall .card { border-left: 4px solid #f59e0b; }
+    .message.system.toolresult .card { border-left: 4px solid #22c55e; }
+    .message-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; font-weight: 700; }
+    .message.user .message-label { color: rgba(255,255,255,0.82); }
+    .message-text { white-space: pre-wrap; line-height: 1.72; word-break: break-word; }
+    .message-text code { font-family: var(--mono); font-size: 0.94em; background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 6px; }
+    .overlay {
+      position: sticky; bottom: 8px; margin-top: auto; align-self: flex-start; max-width: min(760px, 92%);
+      border-radius: 18px; padding: 12px 14px; border: 1px solid rgba(56, 189, 248, 0.28);
+      background: rgba(56, 189, 248, 0.10); color: var(--text); box-shadow: var(--shadow);
+    }
+    .overlay strong { display: block; margin-bottom: 6px; }
+    .composer-shell { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+    .composer-input {
+      width: 100%; min-height: 92px; resize: vertical; border-radius: 18px; border: 1px solid var(--line);
+      background: var(--panel-soft); color: var(--text); padding: 14px 16px; line-height: 1.6;
+    }
+    .composer-meta { justify-content: space-between; align-items: center; }
+    .attachments { display: flex; flex-wrap: wrap; gap: 8px; }
+    .attachment-chip {
+      display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-soft); font-size: 13px;
+    }
+    .attachment-chip button { border: none; background: transparent; color: var(--muted); padding: 0; min-width: 20px; }
+    .helper { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+      .main { padding: 14px; }
+      .card { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="会话列表区域">
+      <section class="brand">
+        <h1 class="brand-title">Hermes Chat</h1>
+        <p class="brand-subtitle">OpenClaw 风格聊天页，工具过程、思考内容和最终回复按消息类型独立渲染。</p>
+      </section>
+      <div class="sidebar-tools">
+        <button id="newSessionBtn" class="solid-btn" type="button">新建会话</button>
+        <button id="resetSessionBtn" class="ghost-btn" type="button">重置会话</button>
+      </div>
+      <input id="sessionSearchInput" class="sidebar-search" type="search" placeholder="搜索会话标题或摘要" aria-label="搜索会话">
+      <ul id="sessionList" class="session-list" aria-live="polite"></ul>
+    </aside>
+
+    <main class="main">
+      <section class="toolbar">
+        <div class="toolbar-head">
+          <div>
+            <h2 id="sessionTitle" class="toolbar-title">新聊天</h2>
+            <p id="sessionSubtitle" class="toolbar-subtitle">系统会按类型显示工具调用、思考内容和最终回复，不再把整段文本切成三块字符串。</p>
+          </div>
+          <div id="healthBadge" class="status-pill"><span class="dot"></span><span>检查中</span></div>
+        </div>
+        <div class="toolbar-row">
+          <button id="toggleProcessBtn" class="chip-btn active" type="button">显示执行过程</button>
+          <button id="toggleThinkingBtn" class="chip-btn" type="button">隐藏思考内容</button>
+          <button id="loadOlderBtn" class="chip-btn" type="button">加载更多历史</button>
+          <button id="refreshBtn" class="chip-btn" type="button">刷新历史</button>
+        </div>
+        <div class="toolbar-actions">
+          <button id="heartbeatBtn" class="ghost-btn" type="button">触发心跳</button>
+          <button id="abortBtn" class="danger-btn" type="button">终止任务</button>
+        </div>
+      </section>
+
+      <section class="status-strip" aria-live="polite">
+        <div>
+          <div class="status-title">运行状态</div>
+          <div id="statusText" class="status-text">正在初始化聊天会话</div>
+        </div>
+        <div id="historyWindowText" class="status-pill">历史窗口 60</div>
+      </section>
+
+      <section id="conversation" class="conversation" aria-label="聊天内容区域">
+        <div class="empty">正在加载聊天内容…</div>
+      </section>
+
+      <section class="composer-shell">
+        <label class="sr-only" for="composerInput">输入消息</label>
+        <textarea id="composerInput" class="composer-input" placeholder="输入您的任务描述，按发送开始执行"></textarea>
+        <div class="composer-meta">
+          <div class="composer-actions">
+            <button id="attachBtn" class="ghost-btn" type="button">添加附件</button>
+            <button id="sendBtn" class="solid-btn" type="button">发送消息</button>
+          </div>
+          <div class="helper">默认隐藏思考内容，执行过程与思考内容可以随时单独显示或隐藏。</div>
+        </div>
+        <div id="attachmentList" class="attachments" aria-live="polite"></div>
+        <input id="fileInput" type="file" multiple class="sr-only">
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const STORAGE_KEYS = {
+      showProcess: 'hermes.openclaw.process.v1',
+      showThinking: 'hermes.openclaw.thinking.v1',
+      historyLimit: 'hermes.openclaw.history.v1',
+    }
+    const POLL_INTERVAL_MS = 2800
+    const RUN_WAIT_TIMEOUT_MS = 9000
+    const HISTORY_STEP = 40
+    const HISTORY_DEFAULT = 60
+    const HISTORY_MAX = 400
+    const SESSION_LIMIT = 240
+
+    const state = {
+      sessions: [],
+      sessionKey: '',
+      messages: [],
+      pendingRun: false,
+      pendingRunId: '',
+      pendingStatus: '',
+      healthOk: false,
+      healthSource: '',
+      showProcess: readBool(STORAGE_KEYS.showProcess, true),
+      showThinking: readBool(STORAGE_KEYS.showThinking, false),
+      historyLimit: readNumber(STORAGE_KEYS.historyLimit, HISTORY_DEFAULT),
+      attachments: [],
+      optimisticMessages: [],
+      loadingMessages: false,
+      sessionSearch: '',
+      pollTimer: null,
+      lastError: '',
+      lastSessionRefreshAt: 0,
+      lastHealthRefreshAt: 0,
+      lastWaitAt: 0,
+      conversationPinnedBottom: true,
+    }
+
+    const els = {
+      sessionList: document.getElementById('sessionList'),
+      sessionSearchInput: document.getElementById('sessionSearchInput'),
+      newSessionBtn: document.getElementById('newSessionBtn'),
+      resetSessionBtn: document.getElementById('resetSessionBtn'),
+      sessionTitle: document.getElementById('sessionTitle'),
+      sessionSubtitle: document.getElementById('sessionSubtitle'),
+      healthBadge: document.getElementById('healthBadge'),
+      toggleProcessBtn: document.getElementById('toggleProcessBtn'),
+      toggleThinkingBtn: document.getElementById('toggleThinkingBtn'),
+      loadOlderBtn: document.getElementById('loadOlderBtn'),
+      refreshBtn: document.getElementById('refreshBtn'),
+      heartbeatBtn: document.getElementById('heartbeatBtn'),
+      abortBtn: document.getElementById('abortBtn'),
+      statusText: document.getElementById('statusText'),
+      historyWindowText: document.getElementById('historyWindowText'),
+      conversation: document.getElementById('conversation'),
+      composerInput: document.getElementById('composerInput'),
+      attachBtn: document.getElementById('attachBtn'),
+      sendBtn: document.getElementById('sendBtn'),
+      attachmentList: document.getElementById('attachmentList'),
+      fileInput: document.getElementById('fileInput'),
+    }
+
+    function readBool(key, fallback) {
+      const raw = window.localStorage.getItem(key)
+      if (raw === null) return fallback
+      return raw === '1'
+    }
+
+    function writeBool(key, value) {
+      window.localStorage.setItem(key, value ? '1' : '0')
+    }
+
+    function readNumber(key, fallback) {
+      const raw = Number(window.localStorage.getItem(key))
+      if (!Number.isFinite(raw) || raw <= 0) return fallback
+      return Math.min(HISTORY_MAX, Math.max(HISTORY_DEFAULT, Math.floor(raw)))
+    }
+
+    function writeNumber(key, value) {
+      window.localStorage.setItem(key, String(value))
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;')
+    }
+
+    function formatTime(ts) {
+      if (!ts) return ''
+      try {
+        return new Date(ts).toLocaleString('zh-CN', { hour12: false })
+      } catch {
+        return ''
+      }
+    }
+
+    function trimText(value) {
+      return typeof value === 'string' ? value.trim() : ''
+    }
+
+    function readContentItems(value) {
+      return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : []
+    }
+
+    function extractTextSegments(items, allowedTypes) {
+      const allow = new Set(allowedTypes)
+      const rows = []
+      for (const item of items) {
+        const type = trimText(item.type)
+        if (!allow.has(type)) continue
+        const text = trimText(item.text)
+        if (text) rows.push(text)
+      }
+      return rows.join('\n\n').trim()
+    }
+
+    function safeJsonStringify(value, maxLength = 360) {
+      try {
+        const text = JSON.stringify(value)
+        if (!text) return ''
+        return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text
+      } catch {
+        return ''
+      }
+    }
+
+    function normalizeMessageType(itemType, role, errorFlag = false) {
+      if (role === 'user') return 'user'
+      if (itemType === 'thinking') return 'thinking'
+      if (itemType === 'toolCall') return 'toolcall'
+      if (itemType === 'toolResult') return errorFlag ? 'toolresult error' : 'toolresult'
+      return role === 'assistant' ? 'assistant' : 'system'
+    }
+
+    function toUiMessages(historyMessages) {
+      const output = []
+      for (let index = 0; index < historyMessages.length; index += 1) {
+        const row = historyMessages[index] || {}
+        const role = trimText(row.role)
+        const timestamp = Number.isFinite(row.timestamp) ? row.timestamp : Date.now() + index
+        const baseId = `${timestamp}:${index}`
+        const content = readContentItems(row.content)
+
+        if (role === 'user') {
+          const text = extractTextSegments(content, ['text'])
+          if (text) {
+            output.push({ id: `${baseId}:user`, role: 'user', type: 'user', label: '您的消息', text })
+          }
+          continue
+        }
+
+        if (role === 'assistant') {
+          for (let partIndex = 0; partIndex < content.length; partIndex += 1) {
+            const item = content[partIndex] || {}
+            const itemType = trimText(item.type)
+            if (itemType === 'thinking') {
+              if (!state.showThinking) continue
+              const thinking = trimText(item.thinking)
+              if (!thinking) continue
+              output.push({
+                id: `${baseId}:thinking:${partIndex}`,
+                role: 'system',
+                type: 'thinking',
+                label: '思考内容',
+                text: thinking,
+              })
+              continue
+            }
+            if (itemType === 'toolCall') {
+              if (!state.showProcess) continue
+              const name = trimText(item.name) || 'unknown'
+              const detail = safeJsonStringify(item.arguments)
+              output.push({
+                id: `${baseId}:toolcall:${partIndex}`,
+                role: 'system',
+                type: 'toolcall',
+                label: '工具调用',
+                text: detail ? `工具调用 ${name}\n参数 ${detail}` : `工具调用 ${name}`,
+              })
+              continue
+            }
+            if (itemType === 'toolResult') {
+              if (!state.showProcess) continue
+              const text = trimText(item.text)
+              if (!text) continue
+              output.push({
+                id: `${baseId}:toolresult:${partIndex}`,
+                role: 'system',
+                type: item.isError ? 'toolresult error' : 'toolresult',
+                label: item.isError ? '工具结果异常' : '工具结果',
+                text,
+              })
+              continue
+            }
+            if (itemType === 'text') {
+              const text = trimText(item.text)
+              if (!text) continue
+              output.push({
+                id: `${baseId}:assistant:${partIndex}`,
+                role: 'assistant',
+                type: 'assistant',
+                label: '最终回复',
+                text,
+              })
+            }
+          }
+          continue
+        }
+
+        if (role === 'toolResult' && state.showProcess) {
+          const text = extractTextSegments(content, ['text'])
+          if (!text) continue
+          output.push({
+            id: `${baseId}:toolresult`,
+            role: 'system',
+            type: row.isError ? 'toolresult error' : 'toolresult',
+            label: row.isError ? '工具结果异常' : '工具结果',
+            text,
+          })
+        }
+      }
+      return output
+    }
+
+    function renderSessions() {
+      const query = state.sessionSearch.trim().toLowerCase()
+      const rows = state.sessions.filter((row) => {
+        if (!query) return true
+        return [row.title, row.preview, row.key].some((value) => String(value || '').toLowerCase().includes(query))
+      })
+      if (rows.length === 0) {
+        els.sessionList.innerHTML = '<li class="empty">没有匹配的会话</li>'
+        return
+      }
+      els.sessionList.innerHTML = rows.map((row) => {
+        const active = row.key === state.sessionKey ? ' active' : ''
+        return `
+          <li>
+            <button class="session-card${active}" type="button" data-session-key="${escapeHtml(row.key)}">
+              <p class="session-title">${escapeHtml(row.title || '新聊天')}</p>
+              <p class="session-preview">${escapeHtml(row.preview || '暂无消息')}</p>
+              <div class="session-meta">${escapeHtml(formatTime(row.updatedAtMs))}</div>
+            </button>
+          </li>
+        `
+      }).join('')
+    }
+
+    function renderToolbar() {
+      const activeSession = state.sessions.find((row) => row.key === state.sessionKey)
+      els.sessionTitle.textContent = activeSession?.title || '新聊天'
+      els.sessionSubtitle.textContent = activeSession?.preview
+        ? `当前会话摘要：${activeSession.preview}`
+        : '系统会按消息类型分别显示工具过程、思考内容和最终回复。'
+      els.toggleProcessBtn.textContent = state.showProcess ? '隐藏执行过程' : '显示执行过程'
+      els.toggleThinkingBtn.textContent = state.showThinking ? '隐藏思考内容' : '显示思考内容'
+      els.toggleProcessBtn.classList.toggle('active', state.showProcess)
+      els.toggleThinkingBtn.classList.toggle('active', state.showThinking)
+      els.historyWindowText.textContent = `历史窗口 ${state.historyLimit}`
+      els.abortBtn.disabled = !state.pendingRun
+      els.heartbeatBtn.disabled = !state.sessionKey
+      els.sendBtn.disabled = !state.sessionKey || (!els.composerInput.value.trim() && state.attachments.length === 0)
+      const dotClass = state.pendingRun ? 'busy' : (state.healthOk ? 'ok' : 'fail')
+      const text = state.pendingRun ? `运行中 ${state.pendingStatus || 'running'}` : (state.healthOk ? '网关已连接' : '网关未就绪')
+      els.healthBadge.innerHTML = `<span class="dot ${dotClass}"></span><span>${escapeHtml(text)}</span>`
+      if (state.lastError) {
+        els.statusText.textContent = state.lastError
+      } else if (state.pendingRun) {
+        els.statusText.textContent = `任务执行中，状态 ${state.pendingStatus || 'running'}。页面会自动轮询并刷新结构化历史。`
+      } else {
+        els.statusText.textContent = state.healthOk ? '聊天网关已就绪，可以继续发送消息。' : '正在等待聊天网关就绪。'
+      }
+    }
+
+    function renderAttachments() {
+      if (state.attachments.length === 0) {
+        els.attachmentList.innerHTML = ''
+        return
+      }
+      els.attachmentList.innerHTML = state.attachments.map((file, index) => `
+        <span class="attachment-chip">
+          <span>${escapeHtml(file.name)} · ${Math.max(1, Math.round(file.size / 1024))} KB</span>
+          <button type="button" data-remove-attachment="${index}" aria-label="移除附件 ${escapeHtml(file.name)}">移除</button>
+        </span>
+      `).join('')
+    }
+
+    function renderConversation() {
+      const shouldStick = isNearBottom(els.conversation)
+      const messages = [...state.messages, ...state.optimisticMessages]
+      if (messages.length === 0) {
+        els.conversation.innerHTML = '<div class="empty">当前会话还没有消息，发送第一条指令开始。</div>'
+      } else {
+        els.conversation.innerHTML = messages.map((message) => {
+          const roleClass = message.role === 'user' ? 'user' : (message.role === 'assistant' ? 'assistant' : 'system')
+          const typeClass = message.type ? ` ${message.type}` : ''
+          return `
+            <article class="message ${roleClass}${typeClass}">
+              <div class="card">
+                <div class="message-label">${escapeHtml(message.label || '')}</div>
+                <div class="message-text">${escapeHtml(message.text)}</div>
+              </div>
+            </article>
+          `
+        }).join('')
+      }
+      if (state.pendingRun) {
+        const overlay = document.createElement('div')
+        overlay.className = 'overlay'
+        overlay.innerHTML = `<strong>任务执行中</strong><div>当前状态 ${escapeHtml(state.pendingStatus || 'running')}。页面正在自动拉取结构化历史。</div>`
+        els.conversation.appendChild(overlay)
+      }
+      if (shouldStick) {
+        requestAnimationFrame(() => {
+          els.conversation.scrollTop = els.conversation.scrollHeight
+        })
+      }
+    }
+
+    function isNearBottom(el) {
+      return el.scrollHeight - el.scrollTop - el.clientHeight < 56
+    }
+
+    async function api(path, options = {}, timeoutMs = 10000) {
+      const controller = new AbortController()
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const response = await fetch(path, { ...options, signal: controller.signal })
+        let payload = null
+        try {
+          payload = await response.json()
+        } catch {
+          payload = null
+        }
+        if (!response.ok) {
+          throw new Error(payload?.error || `HTTP ${response.status}`)
+        }
+        return payload
+      } finally {
+        window.clearTimeout(timer)
+      }
+    }
+
+    async function refreshHealth() {
+      try {
+        const payload = await api('/openclaw-api/gateway/status', {}, 12000)
+        state.healthOk = payload.ok === true && payload.gatewayConnected !== false
+        state.healthSource = trimText(payload.source)
+        if (state.lastError === '健康检查失败') {
+          state.lastError = ''
+        }
+      } catch (error) {
+        state.healthOk = false
+        state.healthSource = ''
+        state.lastError = error instanceof Error ? error.message : '健康检查失败'
+      }
+      renderToolbar()
+    }
+
+    async function refreshSessions(preferredKey = '') {
+      const payload = await api(`/openclaw-api/sessions?limit=${SESSION_LIMIT}`, {}, 15000)
+      state.sessions = Array.isArray(payload.sessions) ? payload.sessions : []
+      if (preferredKey && state.sessions.some((row) => row.key === preferredKey)) {
+        state.sessionKey = preferredKey
+      } else if (!state.sessionKey || !state.sessions.some((row) => row.key === state.sessionKey)) {
+        state.sessionKey = state.sessions[0]?.key || ''
+      }
+      renderSessions()
+      renderToolbar()
+    }
+
+    async function ensureSessionReady() {
+      if (state.sessionKey) return state.sessionKey
+      await refreshSessions()
+      if (state.sessionKey) return state.sessionKey
+      const created = await api('/openclaw-api/sessions/new-independent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      }, 15000)
+      state.sessionKey = trimText(created.sessionKey)
+      await refreshSessions(state.sessionKey)
+      return state.sessionKey
+    }
+
+    async function refreshHistory() {
+      if (!state.sessionKey) return
+      state.loadingMessages = true
+      try {
+        const payload = await api('/openclaw-api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionKey: state.sessionKey, limit: state.historyLimit })
+        }, 30000)
+        const historyMessages = Array.isArray(payload.messages) ? payload.messages : []
+        state.messages = toUiMessages(historyMessages)
+        state.lastError = ''
+      } catch (error) {
+        state.lastError = error instanceof Error ? error.message : '加载聊天记录失败'
+      } finally {
+        state.loadingMessages = false
+        renderConversation()
+        renderToolbar()
+      }
+    }
+
+    function appendUploadedPathsToMessage(text, paths) {
+      const trimmed = text.trim()
+      if (!paths.length) return trimmed
+      const rows = paths.map((path) => `PATH::${path}`)
+      const section = [
+        `已附加本地文件路径（共${paths.length}个）。`,
+        '严格规则：后续所有工具调用必须逐字使用 PATH:: 后面的完整绝对路径，不得改写文件名、空格、下划线、连字符或扩展名。',
+        'PATH_BEGIN',
+        ...rows,
+        'PATH_END',
+      ].join('\n')
+      if (!trimmed) {
+        return `${section}\n\n请逐一读取以上全部文件后继续，并在回复中逐字引用完整路径。`
+      }
+      return `${trimmed}\n\n${section}\n\n请逐一读取以上全部文件后继续，并逐字引用完整路径。`
+    }
+
+    async function uploadAttachment(file) {
+      const url = `/openclaw-api/attachments/upload-stream?fileName=${encodeURIComponent(file.name)}&mimeType=${encodeURIComponent(file.type || 'application/octet-stream')}`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(payload?.error || `附件上传失败 HTTP ${response.status}`)
+      }
+      if (!payload?.path) {
+        throw new Error('附件上传失败：返回路径为空')
+      }
+      return payload.path
+    }
+
+    async function sendMessage() {
+      const sessionKey = await ensureSessionReady()
+      const inputText = els.composerInput.value.trim()
+      if (!inputText && state.attachments.length === 0) return
+      const optimisticText = inputText || '请先分析已上传附件并给出关键结论。'
+      const optimisticId = `optimistic:${Date.now()}`
+      state.optimisticMessages = [{ id: optimisticId, role: 'user', type: 'user', label: '您的消息', text: optimisticText }]
+      renderConversation()
+      renderToolbar()
+
+      try {
+        const uploadedPaths = []
+        for (const file of state.attachments) {
+          uploadedPaths.push(await uploadAttachment(file))
+        }
+        const message = appendUploadedPathsToMessage(inputText, uploadedPaths)
+        const payload = await api('/openclaw-api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionKey, message, deliver: false })
+        }, 240000)
+        state.pendingRun = true
+        state.pendingRunId = trimText(payload.runId)
+        state.pendingStatus = state.pendingRunId ? 'submitted' : 'running'
+        state.optimisticMessages = []
+        state.attachments = []
+        els.composerInput.value = ''
+        renderAttachments()
+        await refreshHistory()
+        await refreshSessions(sessionKey)
+        renderToolbar()
+        await waitPendingRun(true)
+      } catch (error) {
+        state.optimisticMessages = []
+        state.lastError = error instanceof Error ? error.message : '发送消息失败'
+        renderConversation()
+        renderToolbar()
+      }
+    }
+
+    async function waitPendingRun(force = false) {
+      if (!state.pendingRun || !state.pendingRunId) return
+      const now = Date.now()
+      if (!force && now - state.lastWaitAt < 2400) return
+      state.lastWaitAt = now
+      try {
+        const payload = await api('/openclaw-api/run/wait', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ runId: state.pendingRunId, sessionKey: state.sessionKey, timeoutMs: RUN_WAIT_TIMEOUT_MS })
+        }, RUN_WAIT_TIMEOUT_MS + 20000)
+        state.pendingStatus = trimText(payload.status) || state.pendingStatus || 'running'
+        if (payload.completed) {
+          state.pendingRun = false
+          state.pendingRunId = ''
+          state.pendingStatus = ''
+        }
+      } catch (error) {
+        state.pendingStatus = 'reconnecting'
+      }
+      await refreshHistory()
+      renderToolbar()
+    }
+
+    async function triggerHeartbeat() {
+      if (!state.sessionKey) return
+      try {
+        const payload = await api('/openclaw-api/heartbeat/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionKey: state.sessionKey })
+        }, 25000)
+        if (trimText(payload.runId)) {
+          state.pendingRun = true
+          state.pendingRunId = trimText(payload.runId)
+          state.pendingStatus = trimText(payload.status) || 'running'
+        }
+        state.lastError = ''
+        await refreshHistory()
+      } catch (error) {
+        state.lastError = error instanceof Error ? error.message : '触发心跳失败'
+      }
+      renderToolbar()
+    }
+
+    async function abortRun() {
+      if (!state.pendingRun) return
+      try {
+        await api('/openclaw-api/run/abort', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionKey: state.sessionKey, runId: state.pendingRunId })
+        }, 25000)
+        state.pendingRun = false
+        state.pendingRunId = ''
+        state.pendingStatus = ''
+        state.lastError = ''
+        await refreshHistory()
+      } catch (error) {
+        state.lastError = error instanceof Error ? error.message : '终止任务失败'
+      }
+      renderToolbar()
+    }
+
+    async function createSession() {
+      try {
+        const payload = await api('/openclaw-api/sessions/new-independent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentSessionKey: state.sessionKey })
+        }, 15000)
+        state.sessionKey = trimText(payload.sessionKey)
+        state.pendingRun = false
+        state.pendingRunId = ''
+        state.pendingStatus = ''
+        state.messages = []
+        await refreshSessions(state.sessionKey)
+        await refreshHistory()
+      } catch (error) {
+        state.lastError = error instanceof Error ? error.message : '创建会话失败'
+        renderToolbar()
+      }
+    }
+
+    async function resetSession() {
+      if (!state.sessionKey) return createSession()
+      try {
+        const payload = await api('/openclaw-api/sessions/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentSessionKey: state.sessionKey })
+        }, 15000)
+        state.sessionKey = trimText(payload.sessionKey)
+        state.pendingRun = false
+        state.pendingRunId = ''
+        state.pendingStatus = ''
+        state.messages = []
+        await refreshSessions(state.sessionKey)
+        await refreshHistory()
+      } catch (error) {
+        state.lastError = error instanceof Error ? error.message : '重置会话失败'
+        renderToolbar()
+      }
+    }
+
+    async function loadOlderHistory() {
+      state.historyLimit = Math.min(HISTORY_MAX, state.historyLimit + HISTORY_STEP)
+      writeNumber(STORAGE_KEYS.historyLimit, state.historyLimit)
+      renderToolbar()
+      await refreshHistory()
+    }
+
+    async function pollOnce() {
+      try {
+        await ensureSessionReady()
+        if (!state.sessionKey) return
+        const now = Date.now()
+        if (now - state.lastSessionRefreshAt > 12000) {
+          state.lastSessionRefreshAt = now
+          await refreshSessions(state.sessionKey)
+        }
+        if (now - state.lastHealthRefreshAt > 10000) {
+          state.lastHealthRefreshAt = now
+          await refreshHealth()
+        }
+        if (state.pendingRun) {
+          await waitPendingRun()
+        } else {
+          await refreshHistory()
+        }
+      } catch (error) {
+        state.lastError = error instanceof Error ? error.message : '轮询失败'
+        renderToolbar()
+      }
+    }
+
+    function bindEvents() {
+      els.newSessionBtn.addEventListener('click', createSession)
+      els.resetSessionBtn.addEventListener('click', resetSession)
+      els.refreshBtn.addEventListener('click', () => refreshHistory())
+      els.loadOlderBtn.addEventListener('click', loadOlderHistory)
+      els.toggleProcessBtn.addEventListener('click', () => {
+        state.showProcess = !state.showProcess
+        writeBool(STORAGE_KEYS.showProcess, state.showProcess)
+        renderToolbar()
+        refreshHistory()
+      })
+      els.toggleThinkingBtn.addEventListener('click', () => {
+        state.showThinking = !state.showThinking
+        writeBool(STORAGE_KEYS.showThinking, state.showThinking)
+        renderToolbar()
+        refreshHistory()
+      })
+      els.heartbeatBtn.addEventListener('click', triggerHeartbeat)
+      els.abortBtn.addEventListener('click', abortRun)
+      els.attachBtn.addEventListener('click', () => els.fileInput.click())
+      els.sendBtn.addEventListener('click', sendMessage)
+      els.fileInput.addEventListener('change', (event) => {
+        const files = Array.from(event.target.files || [])
+        if (!files.length) return
+        state.attachments = [...state.attachments, ...files]
+        event.target.value = ''
+        renderAttachments()
+        renderToolbar()
+      })
+      els.attachmentList.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-remove-attachment]')
+        if (!button) return
+        const index = Number(button.getAttribute('data-remove-attachment'))
+        if (!Number.isFinite(index)) return
+        state.attachments.splice(index, 1)
+        renderAttachments()
+        renderToolbar()
+      })
+      els.sessionList.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-session-key]')
+        if (!button) return
+        const sessionKey = trimText(button.getAttribute('data-session-key'))
+        if (!sessionKey || sessionKey === state.sessionKey) return
+        state.sessionKey = sessionKey
+        state.pendingRun = false
+        state.pendingRunId = ''
+        state.pendingStatus = ''
+        await refreshSessions(sessionKey)
+        await refreshHistory()
+      })
+      els.sessionSearchInput.addEventListener('input', (event) => {
+        state.sessionSearch = event.target.value || ''
+        renderSessions()
+      })
+      els.composerInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault()
+          sendMessage()
+        }
+      })
+      els.composerInput.addEventListener('input', renderToolbar)
+      els.conversation.addEventListener('scroll', () => {
+        state.conversationPinnedBottom = isNearBottom(els.conversation)
+      })
+    }
+
+    async function initialize() {
+      bindEvents()
+      renderAttachments()
+      renderToolbar()
+      renderConversation()
+      await refreshHealth()
+      await ensureSessionReady()
+      await refreshSessions(state.sessionKey)
+      await refreshHistory()
+      state.pollTimer = window.setInterval(() => { void pollOnce() }, POLL_INTERVAL_MS)
+    }
+
+    void initialize()
+  </script>
+</body>
+</html>

@@ -152,7 +152,7 @@ class GatewayService : Service() {
                 val filesDir = applicationContext.filesDir.absolutePath
                 val nativeLibDir = applicationContext.applicationInfo.nativeLibraryDir
                 val pm = ProcessManager(filesDir, nativeLibDir)
-                val proxyScript = ensureChatProxyScript(filesDir)
+                val proxyScript = ensureChatProxyAssets(filesDir)
 
                 // Recreate all directories (config, tmp, home, lib, proc/sys fakes)
                 // in case Android cleared them after an app update (#40).
@@ -299,21 +299,28 @@ class GatewayService : Service() {
         }.also { it.start() }
     }
 
-    private fun ensureChatProxyScript(filesDir: String): String {
-        val guestPath = "/root/.hermes_mobile_proxy/chat_gateway_proxy.py"
-        val hostFile = File("$filesDir/rootfs/ubuntu$guestPath")
-        if (!hostFile.parentFile.exists()) {
-            hostFile.parentFile.mkdirs()
+    private fun ensureChatProxyAssets(filesDir: String): String {
+        val guestDir = "/root/.hermes_mobile_proxy"
+        val hostDir = File("$filesDir/rootfs/ubuntu$guestDir")
+        if (!hostDir.exists()) {
+            hostDir.mkdirs()
         }
-        applicationContext.assets.open("chat_gateway_proxy.py").use { input ->
-            FileOutputStream(hostFile).use { output ->
-                input.copyTo(output)
+
+        fun copyAsset(assetName: String, executable: Boolean) {
+            val hostFile = File(hostDir, assetName)
+            applicationContext.assets.open(assetName).use { input ->
+                FileOutputStream(hostFile).use { output ->
+                    input.copyTo(output)
+                }
             }
+            hostFile.setReadable(true, false)
+            hostFile.setWritable(true, false)
+            hostFile.setExecutable(executable, false)
         }
-        hostFile.setReadable(true, false)
-        hostFile.setWritable(true, false)
-        hostFile.setExecutable(true, false)
-        return guestPath
+
+        copyAsset("chat_gateway_proxy.py", true)
+        copyAsset("openclaw_chat.html", false)
+        return "$guestDir/chat_gateway_proxy.py"
     }
 
     private fun stopGateway() {
