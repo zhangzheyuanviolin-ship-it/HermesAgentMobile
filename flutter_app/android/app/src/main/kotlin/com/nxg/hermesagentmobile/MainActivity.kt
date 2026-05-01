@@ -27,6 +27,7 @@ import android.hardware.SensorManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import fi.iki.elonen.NanoHTTPD
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -39,6 +40,8 @@ class MainActivity : FlutterActivity() {
     private lateinit var bootstrapManager: BootstrapManager
     private lateinit var processManager: ProcessManager
     private var setupDone = false
+    private var shizukuBridgeServer: ShizukuShellBridgeServer? = null
+    private var shizukuPermissionRequested = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -56,6 +59,7 @@ class MainActivity : FlutterActivity() {
                 try { bootstrapManager.writeResolvConf() } catch (_: Exception) {}
             }.start()
         }
+        startShizukuBridgeServer()
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -76,6 +80,65 @@ class MainActivity : FlutterActivity() {
                 }
                 "getBootstrapStatus" -> {
                     result.success(bootstrapManager.getBootstrapStatus())
+                }
+                "getShizukuStatus" -> {
+                    result.success(buildShizukuStatusMap())
+                }
+                "setShizukuBridgeEnabled" -> {
+                    val enabled = call.argument<Boolean>("enabled")
+                    if (enabled == null) {
+                        result.error("INVALID_ARGS", "enabled required", null)
+                    } else {
+                        ShizukuController.setBridgeEnabled(this, enabled)
+                        result.success(buildShizukuStatusMap())
+                    }
+                }
+                "requestShizukuPermission" -> {
+                    if (!ShizukuController.isShizukuAppInstalled(this)) {
+                        result.success(buildShizukuStatusMap())
+                    } else if (!ShizukuController.isServiceRunning()) {
+                        result.success(buildShizukuStatusMap())
+                    } else {
+                        ShizukuController.requestPermission {
+                            runOnUiThread {
+                                result.success(buildShizukuStatusMap())
+                            }
+                        }
+                    }
+                }
+                "maybeRequestShizukuPermission" -> {
+                    val prompted = getShizukuPrompted()
+                    if (prompted || shizukuPermissionRequested) {
+                        result.success(buildShizukuStatusMap())
+                    } else if (!ShizukuController.isShizukuAppInstalled(this)) {
+                        result.success(buildShizukuStatusMap())
+                    } else if (!ShizukuController.isServiceRunning()) {
+                        result.success(buildShizukuStatusMap())
+                    } else if (ShizukuController.hasPermission()) {
+                        setShizukuPrompted(true)
+                        result.success(buildShizukuStatusMap())
+                    } else {
+                        shizukuPermissionRequested = true
+                        setShizukuPrompted(true)
+                        ShizukuController.requestPermission {
+                            runOnUiThread {
+                                result.success(buildShizukuStatusMap())
+                            }
+                        }
+                    }
+                }
+                "openShizukuApp" -> {
+                    val intent = packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                    if (intent == null) {
+                        result.success(false)
+                    } else {
+                        try {
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
+                    }
                 }
                 "extractRootfs" -> {
                     val tarPath = call.argument<String>("tarPath")
@@ -514,6 +577,41 @@ class MainActivity : FlutterActivity() {
     }
 
     private var urlNotificationId = 100
+
+    private fun startShizukuBridgeServer() {
+        if (shizukuBridgeServer != null) return
+        try {
+            val server = ShizukuShellBridgeServer(this)
+            server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
+            shizukuBridgeServer = server
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun buildShizukuStatusMap(): Map<String, Any?> {
+        val serverMap = shizukuBridgeServer?.statusMap()
+        if (serverMap != null) return serverMap
+        return mapOf(
+            "ok" to true,
+            "installed" to ShizukuController.isShizukuAppInstalled(this),
+            "running" to ShizukuController.isServiceRunning(),
+            "granted" to ShizukuController.hasPermission(),
+            "enabled" to ShizukuController.isBridgeEnabled(this),
+            "executor" to "system-shell",
+        )
+    }
+
+    private fun getShizukuPrompted(): Boolean {
+        return getSharedPreferences("hermes_shizuku", Context.MODE_PRIVATE)
+            .getBoolean("auto_prompt_done", false)
+    }
+
+    private fun setShizukuPrompted(done: Boolean) {
+        getSharedPreferences("hermes_shizuku", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("auto_prompt_done", done)
+            .apply()
+    }
 
     private fun showUrlNotification(url: String, title: String) {
         val openIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))

@@ -83,6 +83,11 @@ class _SplashScreenState extends State<SplashScreen>
       final prefs = PreferencesService();
       await prefs.init();
 
+      // First-install flow: if Shizuku app/service is available, request once.
+      try {
+        await NativeBridge.maybeRequestShizukuPermission();
+      } catch (_) {}
+
       // Auto-export snapshot when app version changes
       try {
         final oldVersion = prefs.lastAppVersion;

@@ -48,7 +48,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.nxg.hermesagentmobile"
+        applicationId = "com.nxg.hermesagentmobile.test"
         minSdk = 29
         targetSdk = 36
         versionCode = flutterVersionCode.toInteger()
@@ -88,6 +88,9 @@ dependencies {
     implementation 'org.apache.commons:commons-compress:1.26.0'
     implementation 'org.tukaani:xz:1.9'
     implementation 'com.github.luben:zstd-jni:1.5.6-4@aar'
+    implementation 'org.nanohttpd:nanohttpd:2.3.1'
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
 }
 
 flutter {

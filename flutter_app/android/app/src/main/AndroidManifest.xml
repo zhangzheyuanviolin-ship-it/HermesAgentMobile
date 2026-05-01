@@ -23,10 +23,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <application
-        android:label="Hermes Agent"
+        android:label="Hermes Agent 测试版"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
@@ -74,6 +75,14 @@
             android:name=".SetupService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <meta-data
             android:name="flutterEmbedding"

@@ -25,6 +25,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Map<String, dynamic> _status = {};
   bool _loading = true;
   bool _storageGranted = false;
+  Map<String, dynamic> _shizukuStatus = {};
+  bool _shizukuBusy = false;
 
   @override
   void initState() {
@@ -42,10 +44,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final status = await NativeBridge.getBootstrapStatus();
       final batteryOptimized = await NativeBridge.isBatteryOptimized();
       final storageGranted = await NativeBridge.hasStoragePermission();
+      final shizukuStatus = await NativeBridge.getShizukuStatus();
 
       setState(() {
         _batteryOptimized = batteryOptimized;
         _storageGranted = storageGranted;
+        _shizukuStatus = shizukuStatus;
         _arch = arch;
         _prootPath = prootPath;
         _status = status;
@@ -103,6 +107,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     await NativeBridge.requestStoragePermission();
                     final granted = await NativeBridge.hasStoragePermission();
                     setState(() => _storageGranted = granted);
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Shizuku 系统命令通道'),
+                  subtitle: Text(_buildShizukuSubtitle()),
+                  value: _shizukuStatus['enabled'] == true,
+                  onChanged: _shizukuBusy
+                      ? null
+                      : (value) async {
+                          setState(() => _shizukuBusy = true);
+                          try {
+                            final status = await NativeBridge.setShizukuBridgeEnabled(value);
+                            setState(() => _shizukuStatus = status);
+                          } finally {
+                            if (mounted) {
+                              setState(() => _shizukuBusy = false);
+                            }
+                          }
+                        },
+                ),
+                ListTile(
+                  title: const Text('请求 Shizuku 授权'),
+                  subtitle: const Text('仅当已安装并已启动 Shizuku 服务时可申请'),
+                  leading: const Icon(Icons.shield_outlined),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _shizukuBusy
+                      ? null
+                      : () async {
+                          setState(() => _shizukuBusy = true);
+                          try {
+                            final status = await NativeBridge.requestShizukuPermission();
+                            setState(() => _shizukuStatus = status);
+                          } finally {
+                            if (mounted) {
+                              setState(() => _shizukuBusy = false);
+                            }
+                          }
+                        },
+                ),
+                ListTile(
+                  title: const Text('打开 Shizuku 应用'),
+                  subtitle: const Text('用于启动服务或检查授权状态'),
+                  leading: const Icon(Icons.open_in_new),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final opened = await NativeBridge.openShizukuApp();
+                    if (!mounted) return;
+                    if (!opened) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('未找到 Shizuku 应用或无法打开')),
+                      );
+                    }
                   },
                 ),
                 const Divider(),
@@ -202,6 +258,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
     );
+  }
+
+  String _buildShizukuSubtitle() {
+    final installed = _shizukuStatus['installed'] == true;
+    final running = _shizukuStatus['running'] == true;
+    final granted = _shizukuStatus['granted'] == true;
+    final enabled = _shizukuStatus['enabled'] == true;
+    return '已安装:${installed ? '是' : '否'}  服务:${running ? '运行中' : '未运行'}  授权:${granted ? '已授予' : '未授予'}  开关:${enabled ? '开启' : '关闭'}';
   }
 
   Future<String> _getSnapshotPath() async {

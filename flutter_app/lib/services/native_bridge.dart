@@ -30,6 +30,33 @@ class NativeBridge {
     return Map<String, dynamic>.from(result);
   }
 
+  static Future<Map<String, dynamic>> getShizukuStatus() async {
+    final result = await _channel.invokeMethod('getShizukuStatus');
+    return Map<String, dynamic>.from(result);
+  }
+
+  static Future<Map<String, dynamic>> setShizukuBridgeEnabled(bool enabled) async {
+    final result = await _channel.invokeMethod(
+      'setShizukuBridgeEnabled',
+      {'enabled': enabled},
+    );
+    return Map<String, dynamic>.from(result);
+  }
+
+  static Future<Map<String, dynamic>> requestShizukuPermission() async {
+    final result = await _channel.invokeMethod('requestShizukuPermission');
+    return Map<String, dynamic>.from(result);
+  }
+
+  static Future<Map<String, dynamic>> maybeRequestShizukuPermission() async {
+    final result = await _channel.invokeMethod('maybeRequestShizukuPermission');
+    return Map<String, dynamic>.from(result);
+  }
+
+  static Future<bool> openShizukuApp() async {
+    return await _channel.invokeMethod<bool>('openShizukuApp') ?? false;
+  }
+
   static Future<bool> extractRootfs(String tarPath) async {
     return await _channel.invokeMethod<bool>('extractRootfs', {'tarPath': tarPath}) ?? false;
   }

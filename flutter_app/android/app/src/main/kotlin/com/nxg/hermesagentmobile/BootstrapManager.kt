@@ -505,6 +505,114 @@ class BootstrapManager(
         //    (dpkg error 100 = "Could not exec dpkg" = permission issue).
         //    Recursively ensure all files in bin/sbin/lib dirs are executable.
         fixBinPermissions()
+
+        // 9. Install system-shell bridge scripts into guest PATH.
+        installShizukuBridgeScripts()
+    }
+
+    private fun installShizukuBridgeScripts() {
+        val binDir = File("$rootfsDir/usr/local/bin")
+        binDir.mkdirs()
+
+        val statusScript = File(binDir, "system-shell-status")
+        statusScript.writeText(
+            """
+#!/bin/sh
+/usr/bin/python3 - <<'PY'
+import json
+import sys
+import urllib.request
+
+url = 'http://127.0.0.1:18926/status'
+try:
+    req = urllib.request.Request(url, method='GET')
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        raw = resp.read().decode('utf-8', errors='replace')
+        data = json.loads(raw or '{}')
+except Exception as e:
+    data = {
+        'ok': False,
+        'installed': False,
+        'running': False,
+        'granted': False,
+        'enabled': False,
+        'executor': 'system-shell',
+        'error_code': 'bridge_unreachable',
+        'error': str(e),
+    }
+print(json.dumps(data, ensure_ascii=False, indent=2))
+sys.exit(0 if data.get('ok') else 3)
+PY
+            """.trimIndent() + "\n"
+        )
+
+        val systemShellScript = File(binDir, "system-shell")
+        systemShellScript.writeText(
+            """
+#!/bin/sh
+if [ "__DOLLAR__#" -eq 0 ]; then
+  echo "Usage: system-shell <command>" >&2
+  exit 2
+fi
+
+cmdline="__DOLLAR__*"
+case "$cmdline" in
+  *ubuntu-shell*|*ubuntu-status*|*".openclaw-android/linux-runtime/bin/ubuntu-shell.sh"*|*ANYCLAW_UBUNTU_BIN*)
+    /bin/sh -lc "$cmdline"
+    exit "__DOLLAR__?"
+    ;;
+esac
+
+/usr/bin/python3 - "__DOLLAR__@" <<'PY'
+import json
+import sys
+import urllib.request
+
+command = " ".join(sys.argv[1:]).strip()
+payload = json.dumps({"command": command}).encode("utf-8")
+req = urllib.request.Request(
+    "http://127.0.0.1:18926/exec",
+    data=payload,
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+
+try:
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+except Exception as e:
+    sys.stderr.write("Shizuku bridge unreachable: %s\n" % e)
+    sys.exit(3)
+
+try:
+    data = json.loads(raw or "{}")
+except Exception:
+    sys.stderr.write(raw + "\n")
+    sys.exit(1)
+
+stdout = data.get("stdout")
+stderr = data.get("stderr")
+if isinstance(stdout, str) and stdout:
+    sys.stdout.write(stdout)
+if isinstance(stderr, str) and stderr:
+    sys.stderr.write(stderr)
+if not data.get("ok"):
+    err = data.get("error")
+    code = data.get("error_code")
+    if isinstance(err, str) and err:
+        sys.stderr.write(err + "\n")
+    if isinstance(code, str) and code:
+        sys.stderr.write("error_code=%s\n" % code)
+exit_code = data.get("exitCode")
+if isinstance(exit_code, int):
+    sys.exit(exit_code)
+sys.exit(0 if data.get("ok") else 1)
+PY
+            """.trimIndent().replace("__DOLLAR__", "${'$'}") + "\n"
+        )
+
+        statusScript.setExecutable(true, false)
+        systemShellScript.setExecutable(true, false)
     }
 
     /**

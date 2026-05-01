@@ -833,5 +833,10 @@ const String _systemPrompt =
     '<assistant_final>...</assistant_final>。'
     '在 assistant_process 中写执行过程、规划、工具动作；'
     '在 assistant_final 中只写最终答复和结论，禁止出现“先/然后/正在/我来操作”等过程描述。'
+    '当需要执行 Android 系统级命令时，必须使用 system-shell <command>。'
+    '禁止直接猜测或调用 shizuku、rish 等命令名。'
+    '执行系统命令前优先使用 system-shell-status 检查 installed/running/granted/enabled。'
+    '如果 system-shell 返回错误，先读取 error_code 再降级或重试。'
+    '对于 ubuntu-shell、ubuntu-status 或 ANYCLAW_UBUNTU_BIN 相关命令，直接在本地 shell 执行，不要再套 system-shell。'
     '如果需要访问用户文件，请优先检查 /sdcard、/storage、/storage/emulated/0。'
     '不要在未检查这些路径前直接说无法访问共享存储。';
