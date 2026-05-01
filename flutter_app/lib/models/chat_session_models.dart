@@ -2,6 +2,7 @@ class ChatTurn {
   final String id;
   final String userPrompt;
   final String assistantProcess;
+  final String assistantThinking;
   final String assistantFinal;
   final bool isStreaming;
   final String? error;
@@ -10,6 +11,7 @@ class ChatTurn {
     required this.id,
     required this.userPrompt,
     this.assistantProcess = '',
+    this.assistantThinking = '',
     this.assistantFinal = '',
     this.isStreaming = false,
     this.error,
@@ -17,6 +19,7 @@ class ChatTurn {
 
   ChatTurn copyWith({
     String? assistantProcess,
+    String? assistantThinking,
     String? assistantFinal,
     bool? isStreaming,
     String? error,
@@ -26,6 +29,7 @@ class ChatTurn {
       id: id,
       userPrompt: userPrompt,
       assistantProcess: assistantProcess ?? this.assistantProcess,
+      assistantThinking: assistantThinking ?? this.assistantThinking,
       assistantFinal: assistantFinal ?? this.assistantFinal,
       isStreaming: isStreaming ?? this.isStreaming,
       error: clearError ? null : (error ?? this.error),
@@ -37,6 +41,7 @@ class ChatTurn {
       'id': id,
       'userPrompt': userPrompt,
       'assistantProcess': assistantProcess,
+      'assistantThinking': assistantThinking,
       'assistantFinal': assistantFinal,
       'isStreaming': isStreaming,
       'error': error,
@@ -48,6 +53,7 @@ class ChatTurn {
       id: (json['id'] ?? '').toString(),
       userPrompt: (json['userPrompt'] ?? '').toString(),
       assistantProcess: (json['assistantProcess'] ?? '').toString(),
+      assistantThinking: (json['assistantThinking'] ?? '').toString(),
       assistantFinal: (json['assistantFinal'] ?? '').toString(),
       isStreaming: json['isStreaming'] == true,
       error: json['error']?.toString(),

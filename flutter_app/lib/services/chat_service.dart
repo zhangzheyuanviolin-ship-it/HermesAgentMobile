@@ -5,11 +5,13 @@ import '../models/chat_session_models.dart';
 
 class ChatStreamUpdate {
   final String assistantProcess;
+  final String assistantThinking;
   final String assistantFinal;
   final bool done;
 
   const ChatStreamUpdate({
     required this.assistantProcess,
+    required this.assistantThinking,
     required this.assistantFinal,
     this.done = false,
   });
@@ -27,6 +29,18 @@ class _SplitOutput {
   final String finalText;
 
   const _SplitOutput({required this.process, required this.finalText});
+}
+
+class _DisplayOutput {
+  final String process;
+  final String thinking;
+  final String finalText;
+
+  const _DisplayOutput({
+    required this.process,
+    required this.thinking,
+    required this.finalText,
+  });
 }
 
 class ChatService {
@@ -65,6 +79,7 @@ class ChatService {
 
     final rawAssistant = StringBuffer();
     final processFromChunks = StringBuffer();
+    final thinkingFromChunks = StringBuffer();
 
     final request = http.Request(
       'POST',
@@ -125,19 +140,17 @@ class ChatService {
           } catch (_) {
             // Ignore malformed custom tool events.
           }
-          final split = _splitTaggedOutput(rawAssistant.toString());
-          final processText = _joinNonEmpty([
-            processFromChunks.toString().trim(),
-            split.process,
-          ]);
-          final finalText = split.finalText.isNotEmpty
-              ? split.finalText
-              : rawAssistant.toString().trim();
+          final display = _buildDisplayOutput(
+            rawAssistant: rawAssistant.toString(),
+            processText: processFromChunks.toString(),
+            thinkingText: thinkingFromChunks.toString(),
+          );
           return (
             false,
             ChatStreamUpdate(
-              assistantProcess: processText,
-              assistantFinal: finalText,
+              assistantProcess: display.process,
+              assistantThinking: display.thinking,
+              assistantFinal: display.finalText,
             ),
           );
         }
@@ -171,8 +184,8 @@ class ChatService {
             _extractAnyText(delta['thinking']),
           ]);
           if (reasoning.isNotEmpty) {
-            processFromChunks.write(reasoning);
-            processFromChunks.write('\n');
+            thinkingFromChunks.write(reasoning);
+            thinkingFromChunks.write('\n');
           }
 
           final toolCalls = _formatToolCalls(delta['tool_calls']);
@@ -195,20 +208,18 @@ class ChatService {
           }
         }
 
-        final split = _splitTaggedOutput(rawAssistant.toString());
-        final processText = _joinNonEmpty([
-          processFromChunks.toString().trim(),
-          split.process,
-        ]);
-        final finalText = split.finalText.isNotEmpty
-            ? split.finalText
-            : rawAssistant.toString().trim();
+        final display = _buildDisplayOutput(
+          rawAssistant: rawAssistant.toString(),
+          processText: processFromChunks.toString(),
+          thinkingText: thinkingFromChunks.toString(),
+        );
 
         return (
           false,
           ChatStreamUpdate(
-            assistantProcess: processText,
-            assistantFinal: finalText,
+            assistantProcess: display.process,
+            assistantThinking: display.thinking,
+            assistantFinal: display.finalText,
           ),
         );
       }
@@ -246,14 +257,14 @@ class ChatService {
         throw const ChatCancelledException();
       }
 
-      var split = _splitTaggedOutput(rawAssistant.toString());
-      var processText = _joinNonEmpty([
-        processFromChunks.toString().trim(),
-        split.process,
-      ]);
-      var finalText = split.finalText.isNotEmpty
-          ? split.finalText
-          : rawAssistant.toString().trim();
+      var display = _buildDisplayOutput(
+        rawAssistant: rawAssistant.toString(),
+        processText: processFromChunks.toString(),
+        thinkingText: thinkingFromChunks.toString(),
+      );
+      var processText = display.process;
+      var thinkingText = display.thinking;
+      var finalText = display.finalText;
 
       // Fallback: some models stream only process/tool chunks and leave final empty.
       if (finalText.isEmpty) {
@@ -262,15 +273,14 @@ class ChatService {
           model,
           client: requestClient,
         );
-        split = _splitTaggedOutput(nonStreamText);
-        if (split.process.isNotEmpty) {
-          processText = _joinNonEmpty([processText, split.process]);
-        }
-        if (split.finalText.isNotEmpty) {
-          finalText = split.finalText;
-        } else {
-          finalText = nonStreamText.trim();
-        }
+        display = _buildDisplayOutput(
+          rawAssistant: nonStreamText,
+          processText: processFromChunks.toString(),
+          thinkingText: thinkingFromChunks.toString(),
+        );
+        processText = display.process;
+        thinkingText = display.thinking;
+        finalText = display.finalText;
       }
 
       if (_cancelRequested) {
@@ -279,6 +289,7 @@ class ChatService {
 
       yield ChatStreamUpdate(
         assistantProcess: processText,
+        assistantThinking: thinkingText,
         assistantFinal: finalText,
         done: true,
       );
@@ -383,6 +394,32 @@ class ChatService {
     return '';
   }
 
+  _DisplayOutput _buildDisplayOutput({
+    required String rawAssistant,
+    required String processText,
+    required String thinkingText,
+  }) {
+    final rawSplit = _splitTaggedOutput(rawAssistant);
+    final thinkingSplit = _splitThinkingOutput(thinkingText);
+
+    var rawFinal = rawSplit.finalText.trim();
+    if (rawFinal.isEmpty && rawSplit.process.trim().isEmpty) {
+      rawFinal = rawAssistant.trim();
+    }
+
+    return _DisplayOutput(
+      process: processText.trim(),
+      thinking: _joinNonEmpty([
+        thinkingSplit.process,
+        rawSplit.process,
+      ]),
+      finalText: _joinUniqueNonEmpty([
+        thinkingSplit.finalText,
+        rawFinal,
+      ]),
+    );
+  }
+
   _SplitOutput _splitTaggedOutput(String raw) {
     final normalized = _decodeTagEntities(raw);
     final structured = _splitStructuredTaggedOutput(normalized);
@@ -393,6 +430,32 @@ class ChatService {
     final cleaned = _removeTagWrappers(normalized).trim();
     final heuristic = _splitHeuristicOutput(cleaned);
     return _SplitOutput(process: heuristic.process, finalText: heuristic.finalText);
+  }
+
+  _SplitOutput _splitThinkingOutput(String raw) {
+    final normalized = _removeTagWrappers(_decodeTagEntities(raw)).trim();
+    if (normalized.isEmpty) {
+      return const _SplitOutput(process: '', finalText: '');
+    }
+
+    final blocks = normalized
+        .split(RegExp(r'\n\s*\n+'))
+        .map((b) => b.trim())
+        .where((b) => b.isNotEmpty)
+        .toList();
+    if (blocks.isEmpty) {
+      return const _SplitOutput(process: '', finalText: '');
+    }
+
+    for (var i = 0; i < blocks.length; i++) {
+      if (_looksLikeFinalBlock(blocks[i])) {
+        final thinking = blocks.take(i).join('\n\n').trim();
+        final finalText = blocks.skip(i).join('\n\n').trim();
+        return _SplitOutput(process: thinking, finalText: finalText);
+      }
+    }
+
+    return _SplitOutput(process: normalized, finalText: '');
   }
 
   _SplitOutput _splitHeuristicOutput(String raw) {
@@ -587,16 +650,42 @@ class ChatService {
   }
 
   bool _looksLikeProcessBlock(String block) {
-    final firstLine = block.split('\n').first.trimLeft();
+    final firstLine = _normalizeLeadLine(block.split('\n').first);
     const leadWords = [
+      'the user wants',
+      'let me',
+      'i will',
+      'i need to',
+      'i should',
+      'i am going to',
+      "i'm going to",
+      'i can see',
+      'now i can',
+      'now i have',
+      'now i will',
+      'first',
+      'next',
+      'then',
+      'we need to',
+      "i'll",
       '好的，我来',
       '我来操作',
       '我先',
+      '我来检查',
+      '我先检查',
+      '我来加载',
       '先',
+      '先查看',
+      '先读取',
+      '先检查',
       '现在',
+      '现在执行',
       '接下来',
       '然后',
       '随后',
+      '让我',
+      '我将',
+      '我会',
       '正在',
       '开始',
       '确认',
@@ -607,28 +696,109 @@ class ChatService {
       '尝试',
     ];
     for (final w in leadWords) {
-      if (firstLine.startsWith(w)) return true;
+      if (firstLine.toLowerCase().startsWith(w.toLowerCase())) return true;
     }
     return block.contains('工具调用:');
   }
 
   bool _looksLikeFinalBlock(String block) {
-    final firstLine = block.split('\n').first.trimLeft();
-    final heading = RegExp(r'^(#{1,6}\s*)?(最终|结论|总结|报告|结果|答复|回复|输出|建议|测试报告|测试结论)');
-    if (heading.hasMatch(firstLine)) return true;
+    final firstLine = _normalizeLeadLine(block.split('\n').first);
+    const cnStarts = [
+      '以下是',
+      '这是',
+      '最终',
+      '结论',
+      '总结',
+      '汇报',
+      '报告',
+      '结果',
+      '答复',
+      '回复',
+      '输出',
+      '建议',
+      '测试报告',
+      '测试结论',
+      '环境详细报告',
+      '详细报告',
+      '完整汇报',
+      '检查结果',
+      '检查结果汇总',
+      '总体来看',
+    ];
+    const enStarts = [
+      'here is',
+      "here's",
+      'final answer',
+      'summary',
+      'in summary',
+      'result',
+      'results',
+      'report',
+      'overall',
+      'to summarize',
+    ];
+    for (final word in cnStarts) {
+      if (firstLine.startsWith(word)) return true;
+    }
+    final lowerFirstLine = firstLine.toLowerCase();
+    for (final word in enStarts) {
+      if (lowerFirstLine.startsWith(word)) return true;
+    }
     if (block.contains('测试结论')) return true;
+    if (block.contains('环境详细报告')) return true;
+    if (block.contains('总体来看')) return true;
     if (block.contains('| 步骤 |')) return true;
     if (block.contains('|------|')) return true;
+    if (block.contains('| 类别 |')) return true;
+    if (block.contains('| 目标 |')) return true;
+    if (block.contains('### ')) {
+      if (block.contains('报告') || block.contains('汇报') || block.contains('总结') || block.contains('结果')) {
+        return true;
+      }
+    }
     return false;
   }
 
   bool _containsFinalSignal(String text) {
-    final signal = RegExp(r'(最终|结论|总结|报告|结果|建议|因此|综上|完成)');
+    final signal = RegExp(r'(最终|结论|总结|报告|结果|建议|因此|综上|完成|summary|report|overall|final answer)', caseSensitive: false);
     return signal.hasMatch(text);
   }
 
   String _joinNonEmpty(List<String> parts) {
     return parts.where((s) => s.trim().isNotEmpty).join('\n\n').trim();
+  }
+
+  String _joinUniqueNonEmpty(List<String> parts) {
+    final unique = <String>[];
+    for (final part in parts) {
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) continue;
+
+      var merged = false;
+      for (var i = 0; i < unique.length; i++) {
+        final existing = unique[i];
+        if (existing == trimmed || existing.contains(trimmed)) {
+          merged = true;
+          break;
+        }
+        if (trimmed.contains(existing)) {
+          unique[i] = trimmed;
+          merged = true;
+          break;
+        }
+      }
+      if (!merged) {
+        unique.add(trimmed);
+      }
+    }
+    return unique.join('\n\n').trim();
+  }
+
+  String _normalizeLeadLine(String rawLine) {
+    var line = rawLine.trimLeft();
+    line = line.replaceFirst(RegExp(r'^[#>\-\*\d\.\)\(\[\]\s]+'), '');
+    line = line.replaceFirst(RegExp(r'^[^A-Za-z0-9\u4e00-\u9fff]+'), '');
+    return line.trimLeft();
   }
 
   String _extractErrorMessage(String rawBody) {
