@@ -58,6 +58,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _loadingSessions = true;
   bool _sending = false;
   bool _showProcess = true;
+  bool _showThinkingInFinal = false;
   _RuntimeStatus _runtimeStatus = _RuntimeStatus.ready;
   String _runtimeTitle = '已就绪';
   String _runtimeDetail = '可以发送消息';
@@ -361,6 +362,117 @@ class _ChatScreenState extends State<ChatScreen> {
     return '$trimmed\n\n$note';
   }
 
+  String _extractFinalReplyOnly(String raw) {
+    final normalized = raw.replaceAll('\r\n', '\n').trim();
+    if (normalized.isEmpty) return '';
+
+    var cleaned = normalized
+        .replaceAll(
+          RegExp(
+            r'<(?:think|thinking|reasoning|thought)\b[^>]*>[\s\S]*?</(?:think|thinking|reasoning|thought)\s*>',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(
+          RegExp(r'</?(?:think|thinking|reasoning|thought)\b[^>]*>', caseSensitive: false),
+          '',
+        )
+        .trim();
+    if (cleaned.isEmpty) cleaned = normalized;
+
+    final assistantFinal = _extractAssistantFinalBlock(cleaned);
+    if (assistantFinal.isNotEmpty) {
+      cleaned = assistantFinal;
+    }
+
+    final anchored = _extractFromFinalAnchorBlocks(cleaned);
+    if (anchored.isNotEmpty) return anchored;
+
+    final withoutLeadingThinking = _trimLeadingThinkingBlocks(cleaned);
+    if (withoutLeadingThinking.isNotEmpty) return withoutLeadingThinking;
+
+    return cleaned;
+  }
+
+  String _extractAssistantFinalBlock(String text) {
+    final open = RegExp(r'<assistant_final\b[^>]*>', caseSensitive: false).firstMatch(text);
+    if (open == null) return '';
+    final close = RegExp(r'</assistant_final\s*>', caseSensitive: false).firstMatch(text);
+    final start = open.end;
+    var end = text.length;
+    if (close != null && close.start >= start) {
+      end = close.start;
+    }
+    if (end < start) return '';
+    return text.substring(start, end).trim();
+  }
+
+  String _extractFromFinalAnchorBlocks(String text) {
+    final blocks = text
+        .split(RegExp(r'\n\s*\n+'))
+        .map((b) => b.trim())
+        .where((b) => b.isNotEmpty)
+        .toList();
+    if (blocks.length < 2) return '';
+
+    for (var i = 0; i < blocks.length; i++) {
+      if (_isFinalAnchorBlock(blocks[i])) {
+        if (i == 0) return text.trim();
+        return blocks.skip(i).join('\n\n').trim();
+      }
+    }
+    return '';
+  }
+
+  String _trimLeadingThinkingBlocks(String text) {
+    final blocks = text
+        .split(RegExp(r'\n\s*\n+'))
+        .map((b) => b.trim())
+        .where((b) => b.isNotEmpty)
+        .toList();
+    if (blocks.length < 2) return '';
+
+    var leadingThinkingCount = 0;
+    for (final block in blocks) {
+      if (_isFinalAnchorBlock(block)) break;
+      if (_isThinkingBlock(block)) {
+        leadingThinkingCount += 1;
+      } else {
+        break;
+      }
+    }
+
+    if (leadingThinkingCount <= 0 || leadingThinkingCount >= blocks.length) {
+      return '';
+    }
+    return blocks.skip(leadingThinkingCount).join('\n\n').trim();
+  }
+
+  bool _isFinalAnchorBlock(String block) {
+    final firstLine = block.split('\n').first.trimLeft();
+    final anchor = RegExp(
+      r'^(#{1,6}\s*)?(以下是|这是|最终|结论|总结|汇报|报告|结果|答复|回复|完成情况|处理结果|here is|here\'s|final answer|summary|in summary|result|report|overall|to summarize)\b',
+      caseSensitive: false,
+    );
+    if (anchor.hasMatch(firstLine)) return true;
+    if (block.contains('以下是') || block.contains('Final answer')) return true;
+    return false;
+  }
+
+  bool _isThinkingBlock(String block) {
+    final firstLine = block.split('\n').first.trimLeft();
+    final processLead = RegExp(
+      r'^(the user wants|let me|i will|i need to|i should|i am going to|i\'m going to|now i can|now i have|now i will|i can see|first[, ]|next[, ]|then[, ]|我来|我先|先|现在|接下来|然后|随后|让我|我将|我会|需要先|先执行|现在执行)\b',
+      caseSensitive: false,
+    );
+    if (processLead.hasMatch(firstLine)) return true;
+    if (block.contains('工具调用:')) return true;
+    if (block.contains('Now I can see') || block.contains('Key models and their quotas')) return true;
+    if (block.contains('现在我用自然语言总结这些数据')) return true;
+    return false;
+  }
+
   (String, String) _statusForError(Object error) {
     final text = error.toString();
     final lower = text.toLowerCase();
@@ -628,7 +740,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildTurnCard(ChatTurn turn, ThemeData theme) {
     final processText = turn.assistantProcess.trim();
-    final finalText = turn.assistantFinal.trim();
+    final rawFinalText = turn.assistantFinal.trim();
+    final filteredFinalText = _showThinkingInFinal
+        ? rawFinalText
+        : _extractFinalReplyOnly(rawFinalText);
+    final finalText = filteredFinalText.isNotEmpty ? filteredFinalText : rawFinalText;
+    final thinkingHidden = !_showThinkingInFinal &&
+        rawFinalText.isNotEmpty &&
+        finalText != rawFinalText;
     final isStreaming = turn.isStreaming;
 
     return Card(
@@ -670,6 +789,13 @@ class _ChatScreenState extends State<ChatScreen> {
             SelectableText(
               finalText.isNotEmpty ? finalText : (isStreaming ? '正在生成最终回复...' : '（无最终回复内容）'),
             ),
+            if (thinkingHidden) ...[
+              const SizedBox(height: 6),
+              Text(
+                '已隐藏思考内容，可在下方点击“显示思考内容”查看完整回复。',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
             if (turn.error != null && turn.error!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
@@ -775,6 +901,25 @@ class _ChatScreenState extends State<ChatScreen> {
                             _pendingAttachments.isEmpty
                                 ? '添加附件'
                                 : '已添加 ${_pendingAttachments.length} 个附件',
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Semantics(
+                          label: _showThinkingInFinal ? '当前显示思考内容' : '当前隐藏思考内容',
+                          hint: _showThinkingInFinal
+                              ? '双击可在最终回复中隐藏思考内容'
+                              : '双击可在最终回复中显示思考内容',
+                          button: true,
+                          child: OutlinedButton.icon(
+                            onPressed: _sending
+                                ? null
+                                : () => setState(() => _showThinkingInFinal = !_showThinkingInFinal),
+                            icon: Icon(
+                              _showThinkingInFinal
+                                  ? Icons.psychology_alt_outlined
+                                  : Icons.psychology_outlined,
+                            ),
+                            label: Text(_showThinkingInFinal ? '隐藏思考内容' : '显示思考内容'),
                           ),
                         ),
                         if (_pendingAttachments.isNotEmpty) ...[
