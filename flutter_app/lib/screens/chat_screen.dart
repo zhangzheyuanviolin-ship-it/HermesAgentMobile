@@ -452,7 +452,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isFinalAnchorBlock(String block) {
     final firstLine = block.split('\n').first.trimLeft();
     final anchor = RegExp(
-      r'^(#{1,6}\s*)?(以下是|这是|最终|结论|总结|汇报|报告|结果|答复|回复|完成情况|处理结果|here is|here\'s|final answer|summary|in summary|result|report|overall|to summarize)\b',
+      r"^(#{1,6}\s*)?(以下是|这是|最终|结论|总结|汇报|报告|结果|答复|回复|完成情况|处理结果|here is|here's|final answer|summary|in summary|result|report|overall|to summarize)\b",
       caseSensitive: false,
     );
     if (anchor.hasMatch(firstLine)) return true;
@@ -463,7 +463,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isThinkingBlock(String block) {
     final firstLine = block.split('\n').first.trimLeft();
     final processLead = RegExp(
-      r'^(the user wants|let me|i will|i need to|i should|i am going to|i\'m going to|now i can|now i have|now i will|i can see|first[, ]|next[, ]|then[, ]|我来|我先|先|现在|接下来|然后|随后|让我|我将|我会|需要先|先执行|现在执行)\b',
+      r"^(the user wants|let me|i will|i need to|i should|i am going to|i'm going to|now i can|now i have|now i will|i can see|first[, ]|next[, ]|then[, ]|我来|我先|先|现在|接下来|然后|随后|让我|我将|我会|需要先|先执行|现在执行)\b",
       caseSensitive: false,
     );
     if (processLead.hasMatch(firstLine)) return true;
