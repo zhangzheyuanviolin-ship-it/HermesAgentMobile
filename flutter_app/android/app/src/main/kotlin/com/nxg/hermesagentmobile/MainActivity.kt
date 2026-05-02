@@ -182,11 +182,10 @@ class MainActivity : FlutterActivity() {
                 "stopGateway" -> {
                     try {
                         GatewayService.stop(applicationContext)
-                    } catch (_: Exception) {}
-                    // Hard-exit the whole app when stopping the gateway.
-                    // This is the only reliable way to ensure the proot/gateway
-                    // process hierarchy is fully terminated on Android.
-                    android.os.Process.killProcess(android.os.Process.myPid())
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SERVICE_ERROR", e.message, null)
+                    }
                 }
                 "isGatewayRunning" -> {
                     result.success(GatewayService.isProcessAlive())
@@ -591,12 +590,36 @@ class MainActivity : FlutterActivity() {
     private fun buildShizukuStatusMap(): Map<String, Any?> {
         val serverMap = shizukuBridgeServer?.statusMap()
         if (serverMap != null) return serverMap
+        val commandStatus = try {
+            bootstrapManager.ensureShizukuBridgeScripts()
+        } catch (e: Exception) {
+            mapOf(
+                "commandReady" to false,
+                "systemShellExists" to false,
+                "statusCommandExists" to false,
+                "systemShellPath" to "$filesDir/rootfs/ubuntu/usr/local/bin/system-shell",
+                "statusCommandPath" to "$filesDir/rootfs/ubuntu/usr/local/bin/system-shell-status",
+                "commandError" to (e.message ?: "bridge_install_failed"),
+            )
+        }
+        val installed = ShizukuController.isShizukuAppInstalled(this)
+        val running = ShizukuController.isServiceRunning()
+        val permissionGranted = ShizukuController.hasPermission()
+        val enabled = ShizukuController.isBridgeEnabled(this)
+        val commandReady = commandStatus["commandReady"] == true
         return mapOf(
-            "ok" to true,
-            "installed" to ShizukuController.isShizukuAppInstalled(this),
-            "running" to ShizukuController.isServiceRunning(),
-            "granted" to ShizukuController.hasPermission(),
-            "enabled" to ShizukuController.isBridgeEnabled(this),
+            "ok" to (installed && running && permissionGranted && enabled && commandReady),
+            "installed" to installed,
+            "running" to running,
+            "granted" to (permissionGranted && commandReady),
+            "permissionGranted" to permissionGranted,
+            "enabled" to enabled,
+            "commandReady" to commandReady,
+            "systemShellExists" to (commandStatus["systemShellExists"] == true),
+            "statusCommandExists" to (commandStatus["statusCommandExists"] == true),
+            "systemShellPath" to commandStatus["systemShellPath"],
+            "statusCommandPath" to commandStatus["statusCommandPath"],
+            "commandError" to commandStatus["commandError"],
             "executor" to "system-shell",
         )
     }

@@ -23,6 +23,12 @@ class ShizukuShellBridgeServer(
     @Volatile
     private var lastErrorMessage: String? = null
 
+    private val bootstrapManager = BootstrapManager(
+        context,
+        context.filesDir.absolutePath,
+        context.applicationInfo.nativeLibraryDir,
+    )
+
     init {
         persistStatusSnapshot(currentStatusPayload())
     }
@@ -96,6 +102,26 @@ class ShizukuShellBridgeServer(
             return jsonResponse(Response.Status.FORBIDDEN, body)
         }
 
+        val commandStatus = try {
+            bootstrapManager.ensureShizukuBridgeScripts()
+        } catch (e: Exception) {
+            mapOf(
+                "commandReady" to false,
+                "commandError" to (e.message ?: "bridge_install_failed"),
+            )
+        }
+        if (commandStatus["commandReady"] != true) {
+            val errorMessage = (commandStatus["commandError"] as? String)
+                ?: "system-shell wrapper commands are not ready"
+            setLastError("command_unavailable", errorMessage)
+            val body = currentStatusPayload()
+                .put("ok", false)
+                .put("error_code", "command_unavailable")
+                .put("error", errorMessage)
+            persistStatusSnapshot(currentStatusPayload())
+            return jsonResponse(Response.Status.SERVICE_UNAVAILABLE, body)
+        }
+
         val result = ShizukuController.executeShellCommand(command)
         if (result.success) {
             clearLastError()
@@ -127,16 +153,37 @@ class ShizukuShellBridgeServer(
     }
 
     private fun currentStatusPayload(): JSONObject {
+        val commandStatus = try {
+            bootstrapManager.ensureShizukuBridgeScripts()
+        } catch (e: Exception) {
+            mapOf(
+                "commandReady" to false,
+                "systemShellExists" to false,
+                "statusCommandExists" to false,
+                "systemShellPath" to "${context.filesDir.absolutePath}/rootfs/ubuntu/usr/local/bin/system-shell",
+                "statusCommandPath" to "${context.filesDir.absolutePath}/rootfs/ubuntu/usr/local/bin/system-shell-status",
+                "commandError" to (e.message ?: "bridge_install_failed"),
+            )
+        }
         val installed = ShizukuController.isShizukuAppInstalled(context)
         val running = ShizukuController.isServiceRunning()
-        val granted = ShizukuController.hasPermission()
+        val permissionGranted = ShizukuController.hasPermission()
         val enabled = ShizukuController.isBridgeEnabled(context)
+        val commandReady = commandStatus["commandReady"] == true
+        val granted = permissionGranted && commandReady
         return JSONObject()
-            .put("ok", true)
+            .put("ok", installed && running && granted && enabled)
             .put("installed", installed)
             .put("running", running)
             .put("granted", granted)
+            .put("permissionGranted", permissionGranted)
             .put("enabled", enabled)
+            .put("commandReady", commandReady)
+            .put("systemShellExists", commandStatus["systemShellExists"] == true)
+            .put("statusCommandExists", commandStatus["statusCommandExists"] == true)
+            .put("systemShellPath", commandStatus["systemShellPath"])
+            .put("statusCommandPath", commandStatus["statusCommandPath"])
+            .put("commandError", commandStatus["commandError"] ?: JSONObject.NULL)
             .put("executor", "system-shell")
             .put("bridge_port", BRIDGE_PORT)
             .put("last_error_code", lastErrorCode ?: JSONObject.NULL)

@@ -42,9 +42,8 @@ class GatewayService : Service() {
             // This covers slow devices where dir setup takes a long time.
             val thread = inst.gatewayThread
             if (thread != null && thread.isAlive) return true
-            // Fallback: within startup window (3600s)
-            val elapsed = System.currentTimeMillis() - inst.startTime
-            return elapsed < 3_600_000
+            // Final fallback: only report running if the port actually answers.
+            return inst.isPortInUse()
         }
 
         fun start(context: Context) {
@@ -129,24 +128,6 @@ class GatewayService : Service() {
 
         gatewayThread = Thread {
             try {
-                // Check if an existing gateway is already listening on the port.
-                // Moved inside thread to avoid blocking the main thread (#60).
-                if (isPortInUse()) {
-                    // Wait briefly for TIME_WAIT socket to clear after a manual stop
-                    var waited = 0
-                    while (waited < 3000 && isPortInUse()) {
-                        Thread.sleep(300)
-                        waited += 300
-                    }
-                    if (isPortInUse()) {
-                        emitLog("[INFO] Gateway already running on port 18789, adopting existing instance")
-                        updateNotificationRunning()
-                        startUptimeTicker()
-                        startWatchdog()
-                        return@Thread
-                    }
-                }
-
                 emitLog("[INFO] Setting up environment...")
                 val filesDir = applicationContext.filesDir.absolutePath
                 val nativeLibDir = applicationContext.applicationInfo.nativeLibraryDir
@@ -161,6 +142,16 @@ class GatewayService : Service() {
                     emitLog("[INFO] Directories ready")
                 } catch (e: Exception) {
                     emitLog("[WARN] setupDirectories failed: ${e.message}")
+                }
+                try {
+                    val bridgeStatus = bootstrapManager.ensureShizukuBridgeScripts()
+                    if (bridgeStatus["commandReady"] == true) {
+                        emitLog("[INFO] system-shell bridge ready")
+                    } else {
+                        emitLog("[WARN] system-shell bridge not ready")
+                    }
+                } catch (e: Exception) {
+                    emitLog("[WARN] system-shell bridge repair failed: ${e.message}")
                 }
                 try {
                     bootstrapManager.writeResolvConf()
@@ -188,6 +179,23 @@ class GatewayService : Service() {
                         rootfsResolv.writeText(resolvContent)
                     }
                 } catch (_: Exception) {}
+
+                // Only adopt an existing gateway after the current build has
+                // repaired guest-side bridge commands and bind targets.
+                if (isPortInUse()) {
+                    var waited = 0
+                    while (waited < 3000 && isPortInUse()) {
+                        Thread.sleep(300)
+                        waited += 300
+                    }
+                    if (isPortInUse()) {
+                        emitLog("[INFO] Gateway already running on port 18789, adopting existing instance")
+                        updateNotificationRunning()
+                        startUptimeTicker()
+                        startWatchdog()
+                        return@Thread
+                    }
+                }
 
                 // Abort if stop was requested during setup
                 if (stopping) return@Thread
@@ -313,8 +321,6 @@ class GatewayService : Service() {
         emitLog("用户已停止网关")
         val filesDir = applicationContext.filesDir.absolutePath
         Thread({
-            var pythonKilled = false
-
             // 1) Read the inner Python gateway PID and kill it directly.
             // Under Android proot, the child PID is visible from the host.
             val pythonPid = try {
@@ -340,19 +346,13 @@ class GatewayService : Service() {
                 }
 
                 if (isDead) {
-                    pythonKilled = true
                     emitLog("[INFO] Inner Python gateway killed (PID $pythonPid)")
                 } else {
-                    emitLog("[WARN] Failed to kill inner Python gateway (PID $pythonPid). Killing entire app.")
-                    android.os.Process.killProcess(android.os.Process.myPid())
-                    return@Thread
+                    emitLog("[WARN] Failed to kill inner Python gateway (PID $pythonPid)")
                 }
-            } else {
-                // No PID file — assume already dead or never started properly
-                pythonKilled = true
             }
 
-            // 3) Now terminate the proot wrapper.
+            // 2) Terminate the tracked proot wrapper if we still have a handle.
             procToStop?.let { proc ->
                 try {
                     proc.destroy()
@@ -363,7 +363,54 @@ class GatewayService : Service() {
                     try { proc.destroyForcibly() } catch (_: Exception) {}
                 }
             }
+
+            // 3) Last-resort sweep: kill any residual gateway/proot processes
+            // owned by this app so a restart cannot re-adopt a stale instance.
+            val residualPids = collectResidualGatewayPids(filesDir)
+            if (residualPids.isNotEmpty()) {
+                residualPids.forEach { pid ->
+                    try {
+                        Runtime.getRuntime().exec(arrayOf("kill", "-9", pid.toString()))
+                    } catch (_: Exception) {}
+                }
+                try { Thread.sleep(500) } catch (_: InterruptedException) {}
+            }
+
+            val portStillBusy = isPortInUse()
+            val remaining = collectResidualGatewayPids(filesDir)
+            try {
+                File("$filesDir/rootfs/ubuntu/root/.hermes/gateway.pid").delete()
+            } catch (_: Exception) {}
+            if (portStillBusy || remaining.isNotEmpty()) {
+                emitLog("[WARN] Gateway stop incomplete: portBusy=$portStillBusy residualPids=$remaining")
+            } else {
+                emitLog("[INFO] Gateway fully stopped")
+            }
         }, "gateway-stop").apply { isDaemon = true }.start()
+    }
+
+    private fun collectResidualGatewayPids(filesDir: String): List<Int> {
+        val rootfsNeedle = "$filesDir/rootfs/ubuntu"
+        return File("/proc").listFiles()
+            ?.mapNotNull { procDir ->
+                val pid = procDir.name.toIntOrNull() ?: return@mapNotNull null
+                if (pid == android.os.Process.myPid()) return@mapNotNull null
+                val cmdline = try {
+                    File(procDir, "cmdline").readText()
+                        .replace('\u0000', ' ')
+                        .trim()
+                } catch (_: Exception) {
+                    ""
+                }
+                if (cmdline.isBlank()) return@mapNotNull null
+                val matchesCurrentRootfs = cmdline.contains(rootfsNeedle)
+                val matchesGatewayProcess = cmdline.contains("gateway/run.py") &&
+                    (cmdline.contains("python") || cmdline.contains("python3"))
+                if (matchesCurrentRootfs || matchesGatewayProcess) pid else null
+            }
+            ?.distinct()
+            ?.sorted()
+            ?: emptyList()
     }
 
     /** Watchdog: periodically checks if the proot process is alive.

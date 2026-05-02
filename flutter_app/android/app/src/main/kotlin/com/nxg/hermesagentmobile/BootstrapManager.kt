@@ -510,6 +510,25 @@ class BootstrapManager(
         installShizukuBridgeScripts()
     }
 
+    fun ensureShizukuBridgeScripts(): Map<String, Any> {
+        installShizukuBridgeScripts()
+        return getShizukuBridgeCommandStatus()
+    }
+
+    fun getShizukuBridgeCommandStatus(): Map<String, Any> {
+        val systemShell = File("$rootfsDir/usr/local/bin/system-shell")
+        val statusShell = File("$rootfsDir/usr/local/bin/system-shell-status")
+        val systemShellExists = systemShell.exists() && systemShell.canExecute()
+        val statusShellExists = statusShell.exists() && statusShell.canExecute()
+        return mapOf(
+            "commandReady" to (systemShellExists && statusShellExists),
+            "systemShellExists" to systemShellExists,
+            "statusCommandExists" to statusShellExists,
+            "systemShellPath" to systemShell.absolutePath,
+            "statusCommandPath" to statusShell.absolutePath,
+        )
+    }
+
     private fun installShizukuBridgeScripts() {
         val binDir = File("$rootfsDir/usr/local/bin")
         binDir.mkdirs()
