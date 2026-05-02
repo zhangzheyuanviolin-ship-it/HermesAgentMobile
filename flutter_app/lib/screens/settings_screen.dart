@@ -264,8 +264,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final installed = _shizukuStatus['installed'] == true;
     final running = _shizukuStatus['running'] == true;
     final granted = _shizukuStatus['granted'] == true;
-    final enabled = _shizukuStatus['enabled'] == true;
-    return '已安装:${installed ? '是' : '否'}  服务:${running ? '运行中' : '未运行'}  授权:${granted ? '已授予' : '未授予'}  开关:${enabled ? '开启' : '关闭'}';
+    return 'Shizuku${installed ? '已安装' : '未安装'}。 服务${running ? '运行中' : '未运行'}。 权限${granted ? '已授予' : '未授予'}。';
   }
 
   Future<String> _getSnapshotPath() async {
