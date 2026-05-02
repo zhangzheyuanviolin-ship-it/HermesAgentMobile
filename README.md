@@ -12,6 +12,12 @@
 > **Credits & Origin**  
 > The mobile shell, proot integration, terminal emulator, and app architecture are originally from [**OpenClaw Termux**](https://github.com/mithun50/openclaw-termux) by mithun50. This repository is a fork adapted to run the [**Hermes Agent**](https://github.com/nousresearch/hermes-agent) AI gateway instead of OpenClaw.
 
+## Project Docs
+
+- [项目介绍（中文）](docs/PROJECT_INTRO_2026-05-02_CN.md)
+- [阶段状态说明（中文）](docs/STAGE_STATUS_2026-05-02_CN.md)
+- [交接文档（中文）](docs/HANDOVER_2026-05-01_HermesAgentMobile_CN.md)
+
 ---
 
 ## What is Hermes Agent Mobile?
